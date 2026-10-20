@@ -1,0 +1,93 @@
+# Aero Fighters -> Neo Geo MVS conversion (aerofgtn): what stays OUT of the repository.
+# Rule: no ROM data, nothing built or dumped from ROMs, no copyrighted art or third-party
+# code. The repository holds the converter, the HAL sources, the tests and the scripts.
+
+# --- ROM sets (Video System / SNK copyright): supplied by the user, never committed
+/mame_roms/
+*.zip
+*.7z
+*.rom
+*.bin
+*.p1
+*.s1
+*.m1
+*.v1
+*.v2
+*.c1
+*.c2
+*.sp1
+*.sfix
+
+# --- build output: the cartridge files are derived from the ROMs
+/out/
+
+# --- MAME runtime state, screenshots and logs (pictures of the game are copyrighted)
+/cfg/
+/nvram/
+/snap/
+*.log
+*.png
+*.mkv
+*.mp4
+*.avi
+*.wav
+*.npz
+
+# --- copyrighted artwork: the Video System emblem for the Universe BIOS splash (UB_LOGO);
+# tools/make_vslogo.py makes it from your own aerofgt.zip (see README)
+/tools/vslogo.png
+
+# --- third-party code under its own non-GPL licence (vasm): fetch and build it yourself
+/third_party/
+
+# --- the work area: ROM dumps, disassemblies of the original, RAM/VRAM/pixel dumps,
+# captures and experiment trees (hundreds of GB). Only the scripts, the input movies
+# and the engineering record are kept.
+/work/*
+!/work/*.py
+!/work/*.sh
+!/work/*.lua
+!/work/movie1.txt
+!/work/movie7.txt
+!/work/movie7_go.txt
+!/work/movie_idle.txt
+!/work/play/
+/work/play/*
+!/work/play/*.py
+!/work/play/*.sh
+!/work/play/*.lua
+!/work/play/attract.txt
+!/work/play/attract_coin.txt
+!/work/play/fp/
+/work/play/fp/*
+!/work/play/fp/*.py
+!/work/play/fp/*.sh
+!/work/play/fp/*.lua
+!/work/play/fp/*.c
+!/work/play/fh/
+/work/play/fh/*
+!/work/play/fh/*.py
+!/work/play/fh/*.sh
+!/work/play/fh/*.lua
+!/work/attcmp/
+/work/attcmp/*
+!/work/attcmp/tools/
+/work/attcmp/tools/*
+!/work/attcmp/tools/*.py
+!/work/attcmp/tools/*.sh
+!/work/attcmp/tools/*.lua
+!/work/catalog/
+/work/catalog/*
+!/work/catalog/AUDIT.md
+
+# --- editor, Python and backup leftovers
+__pycache__/
+*.pyc
+*.orig
+*.bak
+*.swp
+*~
+.DS_Store
+
+# --- local Claude Code session state
+/.claude/

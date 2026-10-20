@@ -1,0 +1,31 @@
+# tilemap-1 tiles (physical, hex) the HAL drew cell by cell on the fix layer in the harness
+# runs (movie1, movie7, 6000 attract frames; per-cell = not a block, shifted block or
+# cleared block).  tools/gfx.py puts them first in the S ROM.  Tile numbers only.
+2d55
+4021
+402d
+4031
+4032
+403a
+4041
+4042
+4043
+4045
+4047
+4048
+4049
+404b
+404c
+404d
+404f
+4050
+4052
+4053
+4054
+4057
+4059
+52aa
+58f9
+58fb
+590d
+70f0

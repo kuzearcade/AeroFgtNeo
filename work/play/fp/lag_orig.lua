@@ -1,0 +1,14 @@
+-- lag.lua: per game frame, the game's vblank flag as the handler increments it (>= 1: the game had
+-- not consumed the previous vblank = a game-logic lag frame), with LATE/SLOWB/TIMN/stage.  Env: OUT
+dofile(os.getenv("HOME").."/AeroFgtNeo/tests/harness.lua")
+local m=manager.machine; local sp=m.devices[":maincpu"].spaces["program"]; local cpu=m.devices[":maincpu"]
+local out=io.open(os.getenv("OUT"),"w")
+local POS={0x0100,0x0800,0x1234,0x2000,0x2800,0x3000,0x3456,0x3800}
+local tap=sp:install_write_tap(0xff8a8e,0xff8a8f,"lag_fc",function(off,data,mask)
+  local pc=cpu.state["PC"].value
+  if pc>=0x9e2 and pc<=0x9ec then
+    local h=0; for _,p in ipairs(POS) do h=(h*31+sp:read_u16(0x1c0000+2*p))%4294967296 end
+    out:write(string.format("%d %d %d %d %d %d %d %08x\n",HARNESS_GAME_FRAME()+1,sp:read_u8(0xff8055),0,0,0,0,0,h))
+  end
+end)
+emu.register_frame_done(function() tap:reinstall() end)

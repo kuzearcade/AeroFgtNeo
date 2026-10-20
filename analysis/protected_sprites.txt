@@ -1,0 +1,26 @@
+# Sprites to protect from drops (HUD, players, pickups, on-screen text), identified
+# 2026-10-12 from the sprite lists of movie1, movie7 and the 30000-frame attract run
+# (work/eq*/pre.bin) and renders of every candidate image.
+#
+# Rule (attribute words of a list entry: w2 colour = (w2 >> 8) & 0x3f, map = (w2 & 1) << 16 | w3):
+#   protected if colour in {48, 49, 52, 53} or (map & 0x3fc0) == 0x3fc0
+#
+# colour 48  player 1 ship (all bank frames) and its shadow   maps 0x250d-0x2621
+# colour 49  player 2 ship and its shadow                     maps 0x2539-0x2649
+# colour 52  on-screen text: CREDIT:, PRESS 1P/2P BUTTON!, INSERT COINS!, GAME OVER,
+#            CONTINUE ?, countdown digits, PLAYER SELECT, F-18  maps 0x248d-0x2654, 0x2fec
+# colour 53  power-up / bomb pickups and bonus numbers         maps 0x2b36-0x2b6d
+#            (also staff-roll / ranking letters 0x266c-0x2879, 0x3878, 0x387c)
+# map 0x3fc0-0x3fff  the HUD: three tall strips per player whose tiles the game rewrites
+#            through the lookup RAM (P1 at y=8: 0x3fc0 score/label x=304, 0x3fc8 lives x=288,
+#            0x3fd0 bomb stock x=0, 0x3fd8; P2 at y=120: 0x3fe0, 0x3fe8, 0x3ff0, 0x3ff8)
+# Not protected: explosions and player shots (colour 50), enemy bullets (colour 54),
+# enemies (other colours).  No enemy/bullet/explosion used colours 48/49/52/53 in the movies.
+#
+# Columns the protected entries need per frame (visible entries only):
+#   movie1  p50 8,  p99 12, max 12   (heads max 9)
+#   movie7  p50 12, p99 24, max 26   (heads max 16)
+#   attract p50 10, p99 34, max 34   (heads max 11; the maxima are ranking/staff screens)
+# Caveat: the movies cover the USA, Japan and Sweden stages with the F-18 (and the
+# player-select screen); other stages/ships are unchecked (a wrong extra match only
+# makes an enemy protected, a miss leaves it droppable).

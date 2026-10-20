@@ -1,0 +1,26 @@
+# Exact-timing constants.  BOOT_* come from a cycle trace of the original (MAME
+# aerofgt); the rest are measured on the conversion (see tests/calibrate_timing.py).
+BOOT_E_FIRST = 24668035     # first IRQ handler start (0x888), original 68K cycles
+BOOT_K_NEXT = 152           # first vblank asserted after that IRQ is acknowledged
+Q1 = 2000                   # probe expiry distance after each virtual vblank
+SLED_NOPS = 600
+C_S = 320                   # vector start -> first sled NOP (virtual-vblank path; mode from RAM)
+K0 = 8                      # probe: sled start = probe expiry - 4*j + K0 (+0..3)
+C2P_RAW = 574               # probe-2 vector start -> 0x888 without padding (measure)
+WAKE_PAD4 = 0
+WAKE_PAD6 = 1
+W_OFF = 234                 # LOAD_REL write: vector start -> counter load
+C5 = 372                    # sync vector start -> first instruction of 0x45a
+BOOT_BASE_LEAD = 1000       # boot chain expiry placed this long before the boot IRQ
+BOOT_RW = 30000             # boot frame: probe -> wake distance
+PHASE_LINE = 226           # real scanline at which each virtual vblank is asserted
+Q2 = 600                    # probe-2 expiry distance after the wake expiry
+C_S2 = 166                  # wake vector start -> first sled NOP (measure)
+C_L = 268                   # probe-2 vector start -> TIMERLOW write instruction (measure)
+W_IN = 12                   # probe-2 TIMERLOW write (move.w d8(An,Xn),abs.l): instruction start -> load
+# running-CPU IRQ latency: NOP boundary cycle mod 10 -> vector start (MAME, measured)
+LAT1 = 54
+LAT3 = 52
+LAT5 = 50
+LAT7 = 58
+LAT9 = 56
