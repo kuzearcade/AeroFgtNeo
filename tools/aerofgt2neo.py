@@ -445,6 +445,9 @@ def build_prom(regions, security, build_dir, log, assist=False):
             f.write("SPR_RETAIN       equ %d\n" % (0 if assist else int(os.environ.get("AEROFGT_RETAIN", "0"))))
             f.write("DIRECT           equ %d\n" % (0 if assist else int(os.environ.get("AEROFGT_DIRECT", "0"))))
             f.write("GX_VERIFY        equ %d\n" % int(os.environ.get("AEROFGT_GXCHECK", "0")))
+            # hal/gx.s gx_cull (GX_CULLK): the cull rect at 0x2b326 (y0, x0, y1, x1) ^ $8000
+            for i in range(4):
+                f.write("GXC_R%d          equ $%04x\n" % (i, int.from_bytes(patched[0x2b326 + 2 * i:0x2b328 + 2 * i], "big") ^ 0x8000))
             f.write("FX_DIAG          equ %d\n" % int(os.environ.get("AEROFGT_FXDIAG", "0")))
             f.write("NOEXPL           equ %d\n" % (0 if assist else int(os.environ.get("AEROFGT_NOEXPL", "0"))))
             if "AEROFGT_FXDELAY" in os.environ:
@@ -559,6 +562,10 @@ def build_prom(regions, security, build_dir, log, assist=False):
             assert p[0x2a142:0x2a148].hex() == "267c00050858", "shot_collide moved"
             assert p[0x2a166:0x2a16c].hex() == "247c001019c0" and p[0x2a182:0x2a188].hex() == "247c001052c0", "pool scans moved"
             p[0x2a142:0x2a148] = b"\x4e\xf9" + struct.pack(">I", sym("gx_scan"))
+        if re.search(r"(^|,)\s*GX_CULLK\s*=\s*1\b", os.environ.get("AEROFGT_DEFS", "")):
+            # hal/gx.s gx_cull: obj_cull_outside_rect's entry with the ROM rect (lea, nop)
+            assert p[0x2b2d4:0x2b2da].hex() == "45fa00504e71", "cull entry moved"
+            p[0x2b2d4:0x2b2da] = b"\x4e\xf9" + struct.pack(">I", sym("gx_cull"))
         if SND_SOAK:
             # hal/soak.s (diagnostics): the game's sound sender (0x103c, once a frame from its
             # vblank handler) replays the recorded stream instead

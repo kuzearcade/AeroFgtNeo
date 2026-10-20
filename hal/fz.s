@@ -417,6 +417,135 @@ fz_group:
 ; object a0 (active) -> its records at a1 (none past a4: FZB_OVF).  d5 = the pass's
 ; flags (bit 4: pass 1).  Clobbers d0, d1, d6, d7, a3.
 fz_rec:
+	ifne FZ_FASTR
+; (FZ_FASTR, AUDIT 46) the template fast record's way first: 85% of the drawn objects of a
+; dense frame take it, and the general set-up before it (the routine flags in d6, tested
+; again bit by bit, the pair-bullet test) cost ~130 cycles a record.  The objects it does
+; not cover go to the original's way, fz_reco, unchanged: type $18 (the pair bullets) and
+; $2e (zoom), d5 bits 5-7 (they would fold into the flags), B/A tables, more than one
+; piece, no template, the buffer full.  The record is fz_reco's .tnf/.tw/.rr one: w2 | w3
+; the template's long with the piece's colour kept unless the object has its own (5(a0)
+; bit 7), its flips unless the object has its own ($2a non-zero), the object's w2 byte
+; (the front bit from $19, its flips, its colour) on top, pass 1's bits.  d6 is left as
+; it came (fz_reco set it to the flags: neither caller reads it after).
+; FZ_FASTRCHK: fz_reco builds the record again over it and the two are compared
+; (FZ_FRN records, FZ_FRBAD different).
+	if FZ_RC|BP_SHOTS|FZ_TPLCHK|(FZ_TPL=0)|(FZ_FINAL=0)
+	fail    "FZ_FASTR wants FZ_TPL and FZ_FINAL, and not FZ_RC, BP_SHOTS or FZ_TPLCHK"
+	endif
+	ifne FZ_FASTRCHK
+FZ_FRN          equ $d00f30         ; l: (OVR_DIAG's RAM: not together) records compared
+FZ_FRBAD        equ $d00f34         ; l: different
+	endif
+	move.w  $16(a0),d1
+	cmpi.w  #$18,d1
+	beq.w   fz_reco
+	cmpi.w  #$2e,d1
+	beq.w   fz_reco
+	moveq   #-$20,d1                ; (d5 bits 5-7)
+	and.b   d5,d1
+	bne.w   fz_reco
+	moveq   #-$40,d1                ; B or A ($43 bits 6-7)
+	and.b   $43(a0),d1
+	bne.w   fz_reco
+	tst.b   4(a0)                   ; pieces - 1
+	bne.w   fz_reco
+	moveq   #-2,d1                  ; the table (bit 0: the game's flag)
+	and.l   $1a(a0),d1
+	movea.l d1,a3
+	move.w  (a3),d3                 ; its template (as fz_reco's FZ_TPL test)
+	subi.w  #$4001,d3
+	cmpi.w  #$1fff,d3
+	bhs.w   fz_reco
+	cmpa.l  a4,a1
+	bhs.w   fz_reco
+	lsl.w   #4,d3
+	lea     FZ_TPL_AT+16,a3
+	adda.w  d3,a3
+	ifne FZ_FASTRCHK
+	move.l  a1,-(sp)                ; the record's start, for the compare
+	endif
+	addq.l  #4,a1                   ; (+0: the routine, last)
+	move.w  $e(a0),d1
+	add.w   4(a3),d1                ; y + the piece's
+	move.w  $10(a0),d7
+	add.w   6(a3),d7                ; x
+	cmp.w   FZ_FYM,d1               ; on the screen whole (FZ_FINAL)
+	bhs.s   .tnf
+	cmpi.w  #320,d7
+	bhs.s   .tnf
+	move.b  12(a3),(a1)+            ; +4 w0 = w0's high byte | y
+	move.b  d1,(a1)+
+	move.w  14(a3),d1               ; +6 w1 = w1's high byte << 8 | x
+	or.w    d7,d1
+	move.w  d1,(a1)+
+	move.w  #(FZU_FAST<<8)|$fe,d7
+	bra.s   .tw
+.tnf:	move.w  d1,(a1)+                ; +4 y, +6 x (the pass's tests)
+	move.w  d7,(a1)+
+	move.w  #(FZU_FAST<<8)|$ff,d7
+.tw:	move.l  8(a3),d3                ; w2 | w3
+	moveq   #$20,d0                 ; the w2 byte: in front unless $19 bit 7 set, bit 0
+	move.b  $19(a0),d1              ; clear
+	bpl.s   .fr
+	btst    #0,d1
+	bne.s   .fr
+	moveq   #0,d0
+.fr:	move.b  $2a(a0),d1              ; the object's flips: the piece's go
+	beq.s   .pf
+	or.b    d1,d0
+	andi.l  #$0fffffff,d3
+.pf:	move.b  5(a0),d1                ; the object's colour: the piece's goes
+	bpl.s   .pc
+	andi.b  #$f,d1
+	or.b    d1,d0
+	andi.l  #$c0ffffff,d3
+.pc:	ror.l   #8,d0
+	or.l    d0,d3
+	btst    #4,d5                   ; pass 1
+	beq.s   .np
+	ori.l   #$10002000,d3
+.np:	move.l  d3,(a1)+                ; +8 w2, +10 w3
+	move.w  d7,(a1)+                ; +12 the charge, +13 the flag
+	move.w  12(a3),(a1)+            ; +14 w0's high byte, +15 w1's
+	swap    d3                      ; the shape routine: the template's entry + the flips'
+	lsr.w   #5,d3                   ; $200/$400
+	andi.w  #$600,d3
+	movea.l (a3),a3
+	move.l  (a3,d3.w),-16(a1)
+	ifne FZ_FASTRCHK
+	movea.l (sp)+,a3                ; the record, then fz_reco's over it
+	move.l  12(a3),-(sp)
+	move.l  8(a3),-(sp)
+	move.l  4(a3),-(sp)
+	move.l  (a3),-(sp)
+	move.l  a1,-(sp)
+	movea.l a3,a1
+	bsr.w   fz_reco
+	addq.l  #1,FZ_FRN
+	cmpa.l  (sp)+,a1
+	bne.s   .cb
+	movea.l a1,a3
+	lea     -16(a3),a3
+	cmpm.l  (sp)+,(a3)+
+	bne.s   .cb4
+	cmpm.l  (sp)+,(a3)+
+	bne.s   .cb3
+	cmpm.l  (sp)+,(a3)+
+	bne.s   .cb2
+	cmpm.l  (sp)+,(a3)+
+	beq.s   .ck
+	bra.s   .cb1
+.cb:	addq.l  #4,sp
+.cb4:	addq.l  #4,sp
+.cb3:	addq.l  #4,sp
+.cb2:	addq.l  #4,sp
+.cb1:	addq.l  #1,FZ_FRBAD
+.ck:
+	endif
+	rts
+fz_reco:
+	endif
 	moveq   #0,d6                   ; the routine: zoom from the object 8, its colour
 	move.b  d5,d7                   ; 4, flips from the pieces 2, pass 1 1 (d5 bit 4)
 	lsr.b   #4,d7
@@ -1083,6 +1212,10 @@ fz_due:
 	ifne FZ_EARLY
 	move.l  a1,d0
 	bne.s   .x
+	ifne FZ_EARLYB
+	tst.b   HAL_SCH_BUSY            ; (FZ_EARLYB, AUDIT 46: the slot began with the game
+	bne.s   .x                      ; still in its round - no buffer a slot early: its
+	endif                           ; pass would run in the game's time; due next slot)
 	movea.l a3,a1
 .x:
 	endif

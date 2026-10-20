@@ -1540,3 +1540,74 @@ No reboot in the 12 games. The conversion is ahead of the arcade in every nation
 **Shipped as fz69 (2026-10-20): GX_BAND=1 joins the release DEFS** (work/out_fz69; only 538-p1.p1 changes: CRC c2531b64, SHA1 f5d797f8...; the README's table rebuilt from its own command, 9 of 9 files match). Picture check (work/run_cmp3.sh -> work/c3_fz69, beside c3_fz64): movie7 10,000 and attract 6,000 frames, HUD dropouts 0 on both, overruns 0, late sets 654 / 486 (fz64 758 / 569), the contact sheets clean (the black runs are the boss-kill fade to the mission map, as fz64's at its own frames). MiSTer: deployed over fz64 (backup 538-p1.p1.fz64_7c612d9e); chk11 trial clean (work/mister_fz69_chk11/sheet.png: title, attract with the HUD, two coined games, continue, the mission map), audio -35.3 dB (work/vid/fz69_chk11.mkv); the 22-minute open-loop Japan session (/tmp/play_jp.sh, work/vid/fz69_play.mkv, sheet work/vid/fz69_play_sheet.png) played through the ship, city, river, runway, desert, ocean-fleet, base and jet stages to the aliens mission with no reboot and no music gap (musicgap.py: only the end silence).
 
 **Files:** hal/gx.s (section 7: gx_band, gx_bbuild, gx_bcand, gx_bslot, gx_bd7, gx_bref; gx_scan's branch and gx_scanp; gx_upd's GXB_PASS), hal/hal.s (GX_BAND); probes work/play/fh/gxtrace.lua (point 4, the arcade), ramfree.lua (the RAM survey and WATCH), gxbv.lua (the check's counters); work/play/fp/gxcmp.py, the maps map64g/mapgb3g.txt, profiles pg64_*, pg3_* (and pg2_*, pggb_*: the band versions); builds work/out_gb (GX_BAND), out_gbv (+ GXCHECK), out_g0 (off); the matrices work/matrix_gb3.txt, matrix_gb.txt; the attract runs work/play/fp/att_64r, att_gb3.
+
+## 46. Dense scenes in nation 3: where fz69 stands, where a dense frame goes, the plan (2026-10-20; analysis, nothing built)
+
+**Where nation 3 stands (fz69's matrix, work/matrix_gb3.txt).** Ahead of the arcade in total (5.58 / 7.69), in the night fleet (5.64 / 6.43) and in every stage; behind only at equal load in the densest frames: the night fleet's 60-69 objects 28.3 / 27.2 (7,061 frames: ~80 lost frames more than the arcade's rate) and 70+ 35.8 / 31.8 (948 frames: ~40 more). The sections that read "behind" (night fleet t004/t005 at ~36 objects, +0.6/+1.5) carry more objects than the arcade's games at the same point (37.3 vs 34.6): by load the conversion is ahead at 30-50 objects (40+: 5.4 / 8.3). Boss fights: 21 of the nation's 22 overruns and drop frames on 4.47% of boss frames (the desert boss 2.75%). For scale: the 0-10-object frames (maps, select, the cuts) lose 6.7% against the arcade's 4.5% - ~475 frames over the 600k, more than the dense bins together - but that is the game's own cut work (section 40: its tilemap rewrite 132-162k a frame; the palette path is already a 32k-entry table), not a HAL lever.
+
+**What a dense frame is (fz69, the densest night-fleet windows of the matrix games: nation 3 seeds 7/8/9 from frames 46,868 / 184,375 / 56,640, ~540 frames at 60+ objects each; runfp.sh with the function-level map work/play/fp/mkmapfn.py -> map69fn.txt, then fz_rec and the collision index split by their local labels, map69fs.txt).** 60+ objects, cycles a frame (200,000 the frame; 55% of these frames go over it, 67% over the arcade's 163,000):
+
+| item | cycles | per drawn object (~60) |
+|---|---|---|
+| record builder fz_rec | 32.0k | 530 |
+| shape routines (VRAM columns) | 21.9k | 365 |
+| the game outside its top 28 routines | 20.4k | |
+| tilemaps (the night fleet's scroll) | 9.4k | |
+| sched/vid/tcheck | 8.8k | |
+| collision index (gx_band/bbuild/bcand) | 7.8k | |
+| general records' pieces (fz_pd) | 6.9k | |
+| main-loop slot scanner (gx_upd) | 6.6k | |
+| obj_cull_outside_rect (game) | 6.5k | |
+| builder's slot scan (fz_pass) | 6.4k | |
+| spr_ctl, flip+reclaim, fz_* control, ntab | 20k | |
+| obj_calc_hitbox, velocity, move (game) | 12.2k | |
+
+Census of the drawn objects in those frames (work/play/fh/dncen.lua): 58-60 a frame, **85% fast records** (one piece, unzoomed, no B/A, a ROM template): the particles $0b (8-11), ring bullets $cb (7), $43 (4-7), bullets $2d (7-9), explosions $09 (4-5), items $0f (4-5); 8-10 general records (the fleet's ships $02/$3c/$40/$41, the $3d/$33 parts). The pair pool takes nothing here (no type $18 two-piece). fz_rec split: entry 2.3k, flags prologue 3.5k, the pair-bullet test every object pays 1.1k, **the fast path's tests and template fetch 12.7k (~250 a record)**, y/x 1.5k, w2/w3 composition 5.6k, the shape pick 2.1k, the general path 3.2k. The index: query loop 2.5k, build 2.1k + 1.2k per target, entry/end 1.3k. Two full scans of the 255 object slots every frame: the main loop's (6.6k) and the builder's (4.9k + 1.5k for the drawn ones). The shape routines are straight-line VRAM writes (spv_1100: ~45 instructions for a 32x32, the nops the MiSTer's write spacing needs): at their floor.
+
+**The gap in cycles.** Section 23's sensitivity (~1-1.5 points of a dense bin's lost logic per 10k a frame) puts the 60-69 bin's 1.1 points at ~8-10k a dense frame and the 70+ bin's 4 points at ~25-30k - or a policy change, since 70+ frames are rare (0.16% of the nation's frames).
+
+**The plan, exact cuts first (each a DEFS switch, off == fz69 byte for byte):**
+1. **Slot scans as OR chains (`GX_ORSCAN`):** gx_upd's and fz_pass's eight-slot turns test each slot (tst.b + bne, ~20 cycles a slot); OR the eight state bytes into one register first (`move.b`, 7 x `or.b d16(An)`, one branch: ~13 a slot) and test them one by one only in a group with something in it. Pure reads, same order, same exit registers. ~2-3k a dense frame (more in sparse frames).
+2. **The cull rect as constants (`GX_CULLK`):** 2.7M of the 3.6M calls of obj_cull_outside_rect come through 0x2b2d4 with the ROM rect at 0x2b326: a HAL copy with the rect's words ^ $8000 as immediates, each exit leaving d0/d1/d3/d4/a2 and the flags as the original's (the early exits leave d1 raw and d3/d4 the first pair). ~50 of ~200 cycles a call: ~1.5-2k.
+3. **The fast record, tighter (`FZ_FASTR`):** the 85% case pays the general case's set-up: the flags prologue computes d6 bits the fast path then tests one by one (btst/andi.l pairs in w2w3), every object pays the pair-bullet compare, the template address needs `lsl #4` and a lea, FZ_FYM is an absolute-memory compare. A fast-first order (B/A, pieces, zoom, template word, in one short sequence), the w2/w3 masks from a 16-entry table indexed by the flag bits, the pair test only for type $18 behind the template miss, FZ_FYM as an immediate (it is set once per build), the template index pre-scaled by the tool: ~120-160 cycles a record, **~6-8k a dense frame** - the one item of this size. Verification as FZ_TPL's: a shadow mode building every fast record both ways and comparing (FZ_TPLCHK's pattern), the intro entries by round, the attract and the matrix.
+4. **The index, tuned:** dbra over the entry count instead of the end compare, the rejection without a taken branch on the common side, gx_bcand's min/max with one exg path: ~1.5k.
+5. **obj_calc_hitbox:** (y + d)^$8000 = (y^$8000) + d - two eori instead of four, words by movem: ~0.5-1k. Low priority.
+
+Sum of 1-5: **~12-15k a dense frame** - enough for the 60-69 bin by the sensitivity above, about half of the 70+ bin's gap.
+
+**Then the policy lever, measured not assumed:** 6. **Early conversion only when the game is idle (`FZ_EARLYB`):** FZ_EARLY lets the pass begin the next buffer a slot early; in a BUSY slot (the game still in its round) that work runs in the game's time. Section 30 measured the extremes (FZ_EARLY=0: lost logic 4.32 -> 2.27%, late 12.8 -> 18.6%, drop frames 1.50 -> 1.18%); the middle ground is early only in non-BUSY slots and only while the ring has room for a third set (fewer three-set moments in the boss fights: the drops and the commit-tail overruns). Measure: the 60+/70+ bins, late sets, nation 3's boss-fight drops and overruns, the attract A/B.
+
+**Order and measures:** 1 and 2 (mechanical, exact by construction), 3 (the largest; its shadow check before anything runs long), 4-5, each by matched-window split profiles (work/play/fp/map69fs.txt pattern: each build its own map) and the attract A/B; then the matrix; then 6 as an A/B against the result. Not on the list, with reasons: the shape routines (at their floor), the general records (8-10 a frame), the palette (table-driven), the cuts (the game's own work), pools in vblank-written slots (sections 42/44), column sharing (ring-capacity findings), the game's velocity multiply (section 25: a table loses).
+
+**Files:** work/play/fp/mkmapfn.py (function-level map), map69fn.txt, map69fs.txt (fz_rec and the index split), profiles pn69_7/8/9 (category), pf69_7 (function), ps69_7 (split); work/play/fh/dncen.lua (the record-path census).
+
+## 47. Section 46's plan, built and measured (2026-10-20, fz70: `GX_CULLK`, `FZ_FASTR`, `FZ_EARLYB`)
+
+**What did not survive the measuring, before any code:**
+- **OR-chain slot scans (item 1):** simulated on the dense window's recorded slot states (work/play/fh/slotdump.lua, 3,000 frames, 68000 cycle counts for both scanners and both tests): the active objects are spread over the 255 slots, so most groups of eight hold one - the OR pass is wasted there: +3.6k a frame (groups of 8) / +1.4k (groups of 4) for the main loop, +2.8k / +1.0k for the builder, worse at 60+ objects. Not built.
+- **obj_calc_hitbox (item 5):** no free register for the shared ^ $8000, and its exit registers (d2 the last word, a2 the table + 8, the flags of the tst) pin the order: break-even. Not built.
+- **The index tuning (item 4):** ~0.5k on inspection, not worth the risk. Not built.
+
+**Built (each a DEFS switch; with all three off the build is fz69 byte for byte):**
+- **`GX_CULLK` (hal/gx.s 8):** jmp gx_cull at 0x2b2d4 (the cull entry with the ROM rect at 0x2b326): the rect's words ^ $8000 as immediates (GXC_R0..3, written by tools/aerofgt2neo.py from the ROM at build time), every exit's registers and flags as the original's (a2, d0, d3/d4 the pair reached, d1 raw on a y miss, the clr.b's flags outside). GX_VERIFY runs the original first and compares registers, SR and the slot's byte: **0 differences, 4 nations x 40k frames**; a bound off by one gives 129 in 10k (the check bites).
+- **`FZ_FASTR` (hal/fz.s fz_rec):** the template fast record's way first; type $18 and $2e, d5 bits 5-7 (they fold into the original's flags), B/A, more than one piece, no template or a full buffer go to the original's way (fz_reco) unchanged. `FZ_FASTRCHK=1` builds every fast record a second time through fz_reco and compares the 16 bytes and a1: **0 of 3.29M records different** (four nations x 40k); y off by one: 73,075 of 73,075 caught. Measured gain smaller than section 46's estimate: the builder 4-8% less a drawn object (~20-50 cycles, not 120-160 - the template path was already lean; the general set-up it skips is ~60 cycles, part of it moved, not removed).
+- **`FZ_EARLYB` (hal/fz.s fz_due):** a buffer is begun a slot early (FZ_EARLY) only when the slot began with the game idle (HAL_SCH_BUSY clear); in a busy slot its pass waits for its own slot instead of running in the game's time. With it, FZ_TAILX (the commit tail's margin) is 4 lines larger (+192 units: 344): the passes begun in their own slot meet the deadline more often - nation 3's overruns 59 with the old margin, 22 with +2 lines (248), **14 with +4 (344)**.
+
+**The matrix (4 nations x 3 seeds x 200k, botsel 2P autofire + boss bombs; work/matrix_gb3/hcf/hcfe/hcfe344.txt), lost logic conversion / arcade, late sets, drop frames, overruns:**
+
+| build | n0 | n1 | n2 | n3 | late% n0..n3 | drop% n0..n3 | overruns |
+|---|---|---|---|---|---|---|---|
+| fz69 | 1.81 | 2.80 | 5.09 | 5.58 | 5.96 / 8.33 / 11.24 / 11.77 | 0.14 / 0.08 / 0.52 / 0.82 | 2 / 2 / 2 / 22 |
+| + GX_CULLK + FZ_FASTR | 1.56 | 2.40 | 4.27 | 4.97 | 5.69 / 7.42 / 10.69 / 10.38 | 0.17 / 0.07 / 0.25 / 0.87 | 2 / 1 / 2 / 22 |
+| + FZ_EARLYB, margin 152 | 1.27 | 1.93 | 3.51 | 3.95 | 7.22 / 8.38 / 11.43 / 12.93 | 0.17 / 0.10 / 0.57 / 0.86 | 14 / 11 / 27 / 59 |
+| **+ FZ_EARLYB, margin 344 (fz70)** | **1.15** | **1.76** | **2.78** | **3.21** | 7.00 / 8.57 / 8.72 / 11.41 | 0.16 / 0.10 / 0.55 / 0.78 | **1 / 1 / 1 / 14** |
+| the arcade | 3.31 | 6.12 | 8.81 | 7.69 | - | - | - |
+
+**The dense bins, night fleet, conversion / arcade (fz70; fz69 in brackets):** nation 3 60+: **19.9** / 27.2 (28.3), 70+: **28.6** / 31.8 (35.8); nation 1 60+ 21.2 / 30.5, 70+ 29.6 / 37.4; nation 2 60+ 21.5 / 29.0, 70+ 26.9 / 35.4. The deficit of sections 39-46 is gone: ahead of the arcade in every load bin of every nation. Sections behind the arcade (>= 3,000 frames each side): 16 -> 10. No reboot in any of the 39 games (hcf, hcfe and fz70 x 12, hcfe248 x 3). Boss fights: nation 3 9.30 / 15.31 (fz69 12.07), its drop frames 4.41% (4.47%), overruns 12 (21).
+
+**The cost:** late sets +1.0 point in nation 0 (5.96 -> 7.00) and +0.2 in nation 1, -2.5 in nation 2 and -0.4 in nation 3; drop frames +0.02-0.03 points in nations 0-2, -0.04 in nation 3. The attract A/B (12,000 frames, deterministic): lost 491 -> **412**, late 864 -> 846, drop frames 197 -> 164, overruns 1 -> 1.
+
+**Checks:** the picture check (run_cmp3.sh -> work/c3_fz70: movie7 10,000 and attract 6,000 frames, HUD dropouts 0, overruns 0, the contact sheet clean through two games, the ranking screen and the attract); the assist set (aerofgtna) changes with the main set because the build moves the video tables when the HAL outgrows 0xc8000, which both switches together do: its RAM and pixel dumps over movie1's 1,500 frames are byte-identical to fz69's. MiSTer: fz70 deployed (backup 538-p1.p1.fz69_ab82be55); chk11 clean (work/mister_fz70_chk11/sheet.png), audio -35.1 dB; the 22-minute open-loop Japan session (/tmp/play_jp.sh, work/vid/fz70_play.mkv, sheet work/vid/fz70_play_sheet.png) through the ship, city, river, runway, base, desert, ocean-fleet and jet stages to the night stage: no reboot, no music gap (musicgap.py: only the silence after the script's end). **fz70 is the release (2026-10-20):** the README's DEFS gain GX_CULLK=1,FZ_FASTR=1,FZ_EARLYB=1; 538-p1.p1 CRC 4a82388d, the assist's 538a-p1.p1 1ff47c07, the other files fz69's (the README's table rebuilt from its own command: 9 of 9).
+
+**Files:** hal/gx.s (8: gx_cull), hal/fz.s (fz_rec's FZ_FASTR way and fz_reco; fz_due's FZ_EARLYB), hal/hal.s (the switches, FZ_TAILX + 192 x FZ_EARLYB), tools/aerofgt2neo.py (GXC_R0..3, the 0x2b2d4 hook); work/play/fh/slotdump.lua, ctrs.lua; builds work/out_hcf, out_hcfe, out_hcfe248, out_hcfe344 (= out_fz70, p1 md5 1e0211a8), out_hcv/out_hfc (the checks), out_hmut/out_hmut2 (the planted defects).
+

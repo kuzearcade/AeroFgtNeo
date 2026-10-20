@@ -109,6 +109,18 @@ FZ_SPLANCH      equ 1               ; (FUSED=1: hal/fz.s fz_split_anch - a split
 	ifnd GX_SCAN
 GX_SCAN         equ 0               ; (hal/gx.s 6: shot_collide's three pool scans with the
 	endif                           ; shot's x bounds hoisted and a tight loop over active slots)
+	ifnd GX_CULLK
+GX_CULLK        equ 0               ; (hal/gx.s 8: obj_cull_outside_rect's ROM rect as immediates)
+	endif
+	ifnd FZ_FASTR
+FZ_FASTR        equ 0               ; (hal/fz.s fz_rec: the fast record's way first, AUDIT 46)
+	endif
+	ifnd FZ_FASTRCHK
+FZ_FASTRCHK     equ 0               ; (FZ_FASTR's shadow check: fz_reco builds each record again)
+	endif
+	ifnd FZ_EARLYB
+FZ_EARLYB       equ 0               ; (hal/fz.s fz_due: a buffer begun a slot early only with the
+	endif                           ; game idle, AUDIT 46)
 	ifnd GX_BAND
 GX_BAND         equ 0               ; (hal/gx.s 7, with GX_SCAN: AUDIT 43/45's collision index -
 	endif                           ; the targets and their x extents once a pass, for the shots)
@@ -126,7 +138,10 @@ FUSED           equ 0               ; (1: hal/fz.s, the fused direct conversion,
 	ifne FUSED-1
 FZ_TAILX        equ 0
 	else
-FZ_TAILX        equ 56+96*SPR_FLIPRES ; (FUSED: 16-cycle units added to the tail a refill keeps; SPR_FLIPRES:
+FZ_TAILX        equ 56+96*SPR_FLIPRES+192*FZ_EARLYB ; (FUSED: 16-cycle units added to the tail a refill keeps;
+                                    ; FZ_EARLYB: 4 lines more - passes begun in their own slot
+                                    ; meet the deadline more often: overruns 59 -> 14 in nation 3,
+                                    ; AUDIT 47; SPR_FLIPRES:
                                     ; 2 lines more - the commit's sprite work (OVT 7-8) ran 2-6 lines past, AUDIT 40)
 	endif                           ; back, hal/video.s SPR_TAIL: the records' way to a shape's
 	endif                           ; own check, ~900 cycles, is not in their charge; overruns

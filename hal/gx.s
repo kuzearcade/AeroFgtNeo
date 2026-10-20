@@ -774,6 +774,78 @@ gx_bref:
 	endif
 	endif
 
+	ifne GX_CULLK
+; ---------------------------------------------------------------- 8 (GX_CULLK)
+; obj_cull_outside_rect's entry 0x2b2d4 (lea $2b326(pc),a2; nop; then 0x2b2da: the object
+; a0's y/x against the rect at a2, both ^ $8000, the object cleared outside it) - 2.7M of
+; its 3.6M calls in a playthrough, ~200 cycles each, 6.5k a dense frame (AUDIT 46): the
+; ROM rect's words ^ $8000 as immediates (GXC_R0..3, tools/aerofgt2neo.py from the ROM):
+; ~48 cycles less a call.  Out as the original on every exit: a2 = $2b326; d0 = y ^ $8000,
+; d3/d4 = the rect's first pair ^ $8000 and d1 = x raw when the y test fails; else d1 =
+; x ^ $8000 and d3/d4 the second pair; the flags of the last compare (inside), or the
+; clr.b's (outside); X untouched by either.  GX_VERIFY: the original first (its result
+; kept, the slot's byte put back), then this, the registers, the flags and the byte
+; compared (HAL_GX_MISS).
+	ifne GX_VERIFY
+GXK_B0          equ $d00f20         ; (GX_VERIFY, OVR_DIAG's RAM: not together) b: the byte
+GXK_R           equ $d00f22         ; 5 w: d0, d1, d3, d4 and the SR after the original
+GXK_B1          equ $d00f2c         ; b: the slot's byte after it
+	endif
+gx_cull:
+	ifne GX_VERIFY
+	move.b  (a0),GXK_B0
+	lea     $2b326,a2
+	jsr     $2b2da
+	move.w  sr,GXK_R+8
+	movem.w d0-d1/d3-d4,GXK_R
+	move.b  (a0),GXK_B1
+	move.b  GXK_B0,(a0)
+	bsr.s   .k
+	move.w  sr,-(sp)
+	move.l  d2,-(sp)                ; (d2 the caller's: kept)
+	cmpa.l  #$2b326,a2
+	bne.s   .m
+	cmp.w   GXK_R,d0
+	bne.s   .m
+	cmp.w   GXK_R+2,d1
+	bne.s   .m
+	cmp.w   GXK_R+4,d3
+	bne.s   .m
+	cmp.w   GXK_R+6,d4
+	bne.s   .m
+	move.b  GXK_B1,d2
+	cmp.b   (a0),d2
+	bne.s   .m
+	move.w  4(sp),d2
+	cmp.w   GXK_R+8,d2
+	beq.s   .ok
+.m:	addq.l  #1,HAL_GX_MISS
+.ok:	move.l  (sp)+,d2
+	move.w  (sp)+,sr
+	rts
+	endif
+.k:	lea     $2b326,a2
+	move.w  14(a0),d0
+	move.w  16(a0),d1
+	move.w  #GXC_R0,d3
+	move.w  #GXC_R2,d4
+	eori.w  #$8000,d0
+	cmp.w   d3,d0
+	bcs.s   .out
+	cmp.w   d0,d4
+	bcs.s   .out
+	move.w  #GXC_R1,d3
+	move.w  #GXC_R3,d4
+	eori.w  #$8000,d1
+	cmp.w   d3,d1
+	bcs.s   .out
+	cmp.w   d1,d4
+	bcs.s   .out
+	rts
+.out:	clr.b   (a0)                    ; (0x2b322)
+	rts
+	endif
+
 	ifne NOEXPL
 ; Test switch (AEROFGT_NOEXPL=1): the explosions' handlers (object types 0x09 and 0x20,
 ; table 0x199ba) -> this: the object is gone at once (as the loop's own clear, 0x1999c).
