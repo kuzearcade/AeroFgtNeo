@@ -33,6 +33,7 @@ local function inst()
   tap=sp:install_write_tap(C,C+1,"sel",function(o,d,mk) if o==C then selseen=lastgf; selcur=d&0xffff; if os.getenv("SELDBG") then out:write(string.format("S %d %d %d\n",selseen,selcur,o)) end end end)
 end
 inst()
+local CONT=os.getenv("CONT")=="1"     -- (CONT=1: continue at every game over - start pulsed every 90 frames, coin every 600 - to reach the late stages)
 function HARNESS_BOT(gf, v)
   lastgf=gf
   if gf%500==0 then inst() end
@@ -77,6 +78,10 @@ function HARNESS_BOT(gf, v)
     end
   else
     pressed=0; confirming=0; seedset=false
+    if CONT then
+      if gf%90<4 then w[3]=w[3]&~0x0c end                 -- both starts (the game counts a press held 2+ frames)
+      if gf%600>=30 and gf%600<34 then w[3]=w[3]&~0x01 end -- a coin
+    end
     for p=1,2 do
       local b=w[p]|0x30                           -- the shot and bomb bits released
       if gf%4~=3 then b=b&~0x10 end              -- autofire: held 3 frames, released 1 (the game

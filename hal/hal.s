@@ -54,6 +54,9 @@ BG_CUTCAP       equ 0               ; (2026-10-19, AUDIT 39 option 1: a cleared 
 	ifnd BG_SCRRING
 BG_SCRRING      equ 0               ; (option 2: the scroll history a ring, the commit's scroll read from it)
 	endif
+	ifnd SND_SOAK
+SND_SOAK        equ 0               ; (diagnostics, hal/soak.s: replay a recorded sound command stream)
+	endif
 	ifnd SPR_FLIPRES
 SPR_FLIPRES     equ 0               ; (option 5: 2 more lines in the flip's check with 40+ heads)
 	endif
@@ -1410,6 +1413,9 @@ hal_fault:
 	ifne RES
 	include "rs.s"                  ; not cycle-exact: resident sprites
 	endif
+	endif
+	ifne SND_SOAK
+	include "soak.s"                ; diagnostics: the sound soak test
 	endif
 	ifne BUILDX
 EX_SV           equ G_BXEX              ; d2-d3 at the builder's entry

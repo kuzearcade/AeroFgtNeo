@@ -35,6 +35,28 @@ VASMZ80 = os.path.join(ROOT, "third_party", "vasm", "vasmz80_oldstyle")
 
 NGH = 0x0538                # (unused by any Neo Geo title: the official list ends at NGH-272, and the
                             # Universe BIOS 4.0 game table has no 0x0538)
+SND_SOAK = re.search(r"(^|,)\s*SND_SOAK\s*=\s*1\b", os.environ.get("AEROFGT_DEFS", "")) is not None
+SOAK_AT = 0x0f0000          # (SND_SOAK, diagnostics) the replayed sound command stream, over the palette table (64 KB)
+if SND_SOAK:
+    memmap.SOUND_LATCH_NEO = 0xd00ec1   # the game's own sound writes go to the I/O mirror sink
+
+
+def soak_stream():
+    """(SND_SOAK) AEROFGT_SOAK (lines "<game frame> <command hex>") -> pairs (command, calls to
+    wait after it), waits over 255 split with command-0 pairs, ended by (0, 0)."""
+    ev = [(int(f), int(c, 16)) for f, c in (l.split() for l in open(os.environ["AEROFGT_SOAK"]) if l.strip())]
+    out = bytearray()
+    for i, (f, c) in enumerate(ev):
+        d = ev[i + 1][0] - f if i + 1 < len(ev) else 120
+        d = max(d, 1)
+        first = True
+        while d > 0:
+            part = min(d, 255)
+            out += bytes([c if first else 0, part])
+            first = False; d -= part
+    return bytes(out + b"\0\0")
+
+
 BP_SHOTS = re.search(r"(^|,)\s*BP_SHOTS\s*=\s*1\b", os.environ.get("AEROFGT_DEFS", "")) is not None
 SHOT_TYPES = ("000e", "000f", "0011", "0012", "0013", "0016", "0017")    # the player shot object types
 if re.search(r"(^|,)\s*UB_LOGO\s*=\s*1\b", os.environ.get("AEROFGT_DEFS", "")):
@@ -537,6 +559,11 @@ def build_prom(regions, security, build_dir, log, assist=False):
             assert p[0x2a142:0x2a148].hex() == "267c00050858", "shot_collide moved"
             assert p[0x2a166:0x2a16c].hex() == "247c001019c0" and p[0x2a182:0x2a188].hex() == "247c001052c0", "pool scans moved"
             p[0x2a142:0x2a148] = b"\x4e\xf9" + struct.pack(">I", sym("gx_scan"))
+        if SND_SOAK:
+            # hal/soak.s (diagnostics): the game's sound sender (0x103c, once a frame from its
+            # vblank handler) replays the recorded stream instead
+            assert p[0x103c:0x103e].hex() == "41f9", "sound sender moved"
+            p[0x103c:0x1042] = b"\x4e\xf9" + struct.pack(">I", sym("snd_soak"))
         if re.search(r"(^|,)\s*GX_VEL\s*=\s*1\b", os.environ.get("AEROFGT_DEFS", "")):
             # hal/gx.s gx_vel: obj_move_dir_speed's velocity products from a table
             assert p[0x2b950:0x2b956].hex() == "4a406700001c", "velocity routine moved"
@@ -653,6 +680,11 @@ def build_prom(regions, security, build_dir, log, assist=False):
     p[L0SVAR_AT:L0SVAR_AT + 0x2000] = gfx.l0s_variant_table(regions)
     p[UNIVAR_AT:UNIVAR_AT + 0x10] = gfx.uni_variant_table(regions)
     p[PALTAB_AT:PALTAB_AT + 0x10000] = gfx.neo_colour_table_rotated()
+    if SND_SOAK:
+        st = soak_stream()
+        assert len(st) <= 0x10000, "soak stream room: %d bytes" % len(st)
+        p[SOAK_AT:SOAK_AT + 0x10000] = st + bytes(0x10000 - len(st))   # (the palette table gone: wrong colours)
+        print("SND_SOAK: %d stream bytes at 0x%x" % (len(st), SOAK_AT))
     if gx_vel_on and not assist:
         # (after every other table: the room must still be free)
         assert all(b == 0xff for b in p[GXV_AT:GXV_AT + len(gxvel)]), "velocity table room taken"
