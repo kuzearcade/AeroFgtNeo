@@ -1,4 +1,4 @@
--- dropwhy2.lua: at each sprite drop (HAL_SPR_DROP grows): per set its state, START, END, HNEXT,
+-- dropwhy2.lua: at each sprite drop (bp: BP_ST, 0xd00fea, the pair-bullet pool: 2 on) (HAL_SPR_DROP grows): per set its state, START, END, HNEXT,
 -- HMIN; GNEXT, RING_TOP, the pool state, SPS/SPJ, ORD, the records left in the pass (FZ_REC ..
 -- FZ_RECE) and the columns they would take (fast records: +15; general: the descriptors' +11).
 -- Env: OUT, N
@@ -27,7 +27,7 @@ local function ond(o,d,mk)
   local ord={} for i=0,sp:read_u8(0xd00fae)-1 do ord[#ord+1]=sp:read_u8(0xd00faf+i) end
   local n,c=cols_left()
   local hh={} for s=0,2 do hh[#hh+1]=tostring(sp:read_u16(SETS+SSZ*s+10)//2) end
-  out:write(string.format("gf %d W %d %s gnext %d top %d bp %d sps %d spj %d ord %s left %d cols %d busy %d prev %d heads %s\n",HARNESS_GAME_FRAME(),w,table.concat(t," "),sp:read_u16(0xd00fac),sp:read_u16(0xd00fe4),sp:read_u8(0xd0f044),sp:read_i8(0xd00fde),sp:read_u16(0xd00fe0),table.concat(ord,","),n,c,sp:read_u8(0xd00f44),sp:read_u16(0xd00fd2),table.concat(hh,",")))
+  out:write(string.format("gf %d W %d %s gnext %d top %d bp %d sps %d spj %d ord %s left %d cols %d busy %d prev %d heads %s\n",HARNESS_GAME_FRAME(),w,table.concat(t," "),sp:read_u16(0xd00fac),sp:read_u16(0xd00fe4),sp:read_u8(0xd00fea),sp:read_i8(0xd00fde),sp:read_u16(0xd00fe0),table.concat(ord,","),n,c,sp:read_u8(0xd00f44),sp:read_u16(0xd00fd2),table.concat(hh,",")))
   out:flush()
 end
 local function inst() for _,t in ipairs(taps) do t:remove() end; taps={sp:install_write_tap(0xd00ba0,0xd00ba3,"drop",ond)} end

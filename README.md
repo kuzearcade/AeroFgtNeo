@@ -142,7 +142,7 @@ The detailed engineering record, with every experiment and its measurements, is 
 
 ## To do
 
-- **Sprite drops in boss fights.** The remaining drops come from a capacity limit of the Neo Geo sprite column ring. Every column-sharing and matching scheme tried so far has been rejected. Load shedding is the one approach left.
+- **Sprite drops in boss fights.** The remaining drops come from a capacity limit of the Neo Geo sprite column ring: in bomb-heavy boss fights the shown sprite set and the next one are each over half the ring. Column sharing, matching, in-place updates, column merging and load shedding have all been built and measured (section 48 of the audit); none was a net gain. What is left would change the capacity itself: a single-buffered store for some class of sprites, or lending the tilemaps' sprite columns.
 - **The bullet pool.** Three versions of a separate pool for bullets and player shots were built and measured (sections 40, 42 and 44 of the audit). None beat the release. Two tuning knobs remain untried, but neither is expected to help the player shots.
 
 ## Legal

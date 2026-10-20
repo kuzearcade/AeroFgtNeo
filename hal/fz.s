@@ -361,7 +361,21 @@ fz_pass:
 .a1:	lea     $60(a0),a0
 	cmpa.l  d4,a0
 	bhs.s   .x
-.act:	bsr.w   fz_rec
+.act:
+	ifne FZ_SHED
+	tst.b   FZ_SH_LV                ; (FZ_SHED: while shedding, the object's records
+	beq.s   .r0                     ; marked from here)
+	move.l  a1,-(sp)
+	bsr.w   fz_rec
+	bsr.w   fz_shmark
+	addq.l  #4,sp
+	bra.s   .r1
+.r0:
+	endif
+	bsr.w   fz_rec
+	ifne FZ_SHED
+.r1:
+	endif
 	lea     $60(a0),a0
 	bra.s   .s
 .x:	rts
@@ -407,7 +421,20 @@ fz_group:
 	bra.s   .e1
 .e:	movea.l 2(a6),a0
 	move.w  d6,d2                   ; (fz_rec clobbers d6: the loop ran on into stale
+	ifne FZ_SHED
+	tst.b   FZ_SH_LV
+	beq.s   .r0
+	move.l  a1,-(sp)
+	bsr.w   fz_rec
+	bsr.w   fz_shmark
+	addq.l  #4,sp
+	bra.s   .r1
+.r0:
+	endif
 	bsr.w   fz_rec                  ; stack entries - garbage records, a reboot at the
+	ifne FZ_SHED
+.r1:
+	endif
 	move.w  d2,d6                   ; attract's missiles, 2026-10-18; d2 is fz_build's)
 	addq.l  #6,a6
 .e1:	dbra    d6,.e
@@ -1250,6 +1277,30 @@ fz_urgent:
 ; hal_spr_work, after hal_spr_begin: the pass over FZ_DUE into set HAL_SPR_W begins.
 ; Clobbers d0-d1, a0-a1.
 fz_begin:
+	ifne FZ_SHED
+	move.l  HAL_SPR_DROP,d0         ; (FZ_SHED) the last pass dropped sprites: shed one
+	cmp.l   FZ_SH_D,d0              ; level more (at most 2); FZ_SHCALM passes without a
+	beq.s   .shc                    ; drop: one less
+	move.l  d0,FZ_SH_D
+	clr.b   FZ_SH_C
+	cmpi.b  #2,FZ_SH_LV
+	bhs.s   .shp
+	addq.b  #1,FZ_SH_LV
+	bra.s   .shp
+.shc:	tst.b   FZ_SH_LV
+	beq.s   .shp
+	addq.b  #1,FZ_SH_C
+	cmpi.b  #FZ_SHCALM,FZ_SH_C
+	blo.s   .shp
+	clr.b   FZ_SH_C
+	subq.b  #1,FZ_SH_LV
+.shp:	not.b   FZ_SH_P                 ; (the parity: the other half next pass)
+	endif
+	ifne FZ_MERGE
+	move.w  #$ffff,FZ_MG_HN         ; (FZ_MERGE: no last record; on for a set after a large
+	cmpi.w  #FZ_MGT,HAL_SPR_PREV    ; one)
+	scc     FZ_MG_ON
+	endif
 	movea.l FZ_DUE,a0
 	move.b  #2,FZB_ST(a0)
 	move.l  a0,FZ_PBUF
@@ -1541,6 +1592,28 @@ FZ_HUDRES       equ 5*48            ; the HUD pass keeps this back (hal/fx.s fx_
                                     ; its HUD pass runs up to ~5 lines over its charge)
 fz_ntab:
 	movea.l FZ_REC,a1
+	ifne FZ_SHED
+	tst.b   (a1)                    ; (FZ_SHED) a sheddable record, shedding on: skipped
+	bpl.s   .ns                     ; at level 2, every other one (by its index and the
+	move.b  FZ_SH_LV,d0             ; pass's parity: each shown every other frame) at 1
+	beq.s   .cl
+	cmpi.b  #2,d0
+	bhs.s   .sk
+	move.w  a1,d0
+	lsr.w   #4,d0
+	move.b  FZ_SH_P,d6
+	eor.b   d6,d0
+	btst    #0,d0
+	bne.s   .cl
+.sk:	addi.l  #FZ_RSZ,FZ_REC
+	addq.l  #1,FZ_SHN
+	lea     HAL_SPR_MIX,a1          ; (the set a slip, as a drop)
+	move.w  HAL_SPR_W,d0
+	bset    #1,(a1,d0.w)
+	bra.s   fz_ntab
+.cl:	bclr    #7,(a1)                 ; (kept: its long whole again before anything jumps
+.ns:                                    ; through it - a PC with bit 31 set would reach the
+	endif                           ; stack and the resume addresses)
 	ifne FZ_FAST&FZ_FASTCHG
 	ifne FZ_FINAL
 	cmpi.b  #$fe,13(a1)             ; (a fast record: $fe final - fz_fastv, no screen test;
@@ -1739,6 +1812,12 @@ fz_disp:
 	cmpa.l  (sp),a4
 	endif
 	bhs.w   fz_nsl
+	ifne FZ_MERGE
+	tst.b   FZ_MG_ON
+	beq.s   .nm
+	bsr.w   fz_mg                   ; (merged: it goes on at fz_next itself)
+.nm:
+	endif
 	move.w  d2,d1                   ; (w2 bits 13-15) << 6 | ysize << 3 | xsize, x4
 	lsr.w   #4,d1
 	andi.w  #$e0,d1
@@ -1968,9 +2047,286 @@ fz_fastv_rd:
 	st      SS_PRIO(a6)
 	subi.w  #LO_UNITS,d7
 .fr:	swap    d7
+	ifne FZ_MERGE
+	tst.b   FZ_MG_ON
+	beq.s   .nm
+	bsr.w   fz_mg                   ; (merged: it goes on at fz_next itself)
+.nm:
+	endif
 	movea.l (a5),a1
 	jmp     (a1)
 	endif
+	endif
+
+	ifne FZ_SHED
+; ---------------------------------------------------------------- FZ_SHED (AUDIT 48)
+; Load shedding in the boss fights' overloads: the ring holds the shown set and the one in
+; work, ~170-180 columns each in the densest boss frames (with the pair-bullet pool's 64
+; columns taken, 137 each) - the set in work runs out and its last records are dropped,
+; the same ones every frame of an episode (up to 2 s).  Instead, after a pass that dropped,
+; the effects (explosions, sparks, smoke, debris, the bomb's flash, shadows: fz_shtab) are
+; shed first - every other one, alternating, at level 1 (each still shown every other
+; frame), all of them at level 2 - and the level comes down after FZ_SHCALM passes
+; without a drop.  A record is marked sheddable by bit 7 of its first byte (the routine's
+; or table's long: the 68000's addresses are 24 bits, nothing compares the long whole
+; with BP_STABLE and FZ_RC off).  Shed records count in FZ_SHN, the set marked a slip.
+	if BP_STABLE|FZ_RC
+	fail    "FZ_SHED wants the records' first byte free (BP_STABLE, FZ_RC off)"
+	endif
+FZ_SH           equ $10fc30         ; (the idle stack's deep end before the collision index:
+FZ_SH_LV        equ FZ_SH           ; AUDIT 45's WATCH) b: the level (0-2)
+FZ_SH_C         equ FZ_SH+1         ; b: passes without a drop since
+FZ_SH_D         equ FZ_SH+2         ; l: HAL_SPR_DROP at the last pass's begin
+FZ_SHN          equ FZ_SH+6         ; l: records shed
+FZ_SH_P         equ FZ_SH+10        ; b: the pass's parity
+	if FZ_SH+11>$10fc40
+	fail    "FZ_SHED's state over the collision index's"
+	endif
+; after fz_rec: the object's records (from 4(sp) to a1) marked when its type is an effect's.
+; Clobbers d0, a3.
+fz_shmark:
+	move.w  $16(a0),d0
+	cmpi.w  #$ff,d0
+	bhi.s   .x
+	lea     fz_shtab,a3
+	tst.b   (a3,d0.w)
+	beq.s   .x
+	movea.l 4(sp),a3
+.m:	cmpa.l  a1,a3
+	bhs.s   .x
+	bset    #7,(a3)
+	lea     FZ_RSZ(a3),a3
+	bra.s   .m
+.x:	rts
+; the effect types (work/catalog/type_handlers.tsv): explosions 09, 33, 60, 6c, 99, 9b;
+; sparks 0e, 16, a3; the bomb's flash and big explosion 20; shadows 2f, 34, 88
+fz_shtab:
+GXI	set     0
+	rept    256
+	if (GXI=$09)|(GXI=$0e)|(GXI=$16)|(GXI=$20)|(GXI=$2f)|(GXI=$33)|(GXI=$34)|(GXI=$60)|(GXI=$6c)|(GXI=$88)|(GXI=$99)|(GXI=$9b)|(GXI=$a3)
+	dc.b    1
+	else
+	dc.b    0
+	endif
+GXI	set     GXI+1
+	endr
+	even
+	endif
+
+	ifne FZ_MERGE
+; ---------------------------------------------------------------- FZ_MERGE (AUDIT 48)
+; Column merging: a piece (a fast record's, fz_fastv, or any record's, fz_disp:
+; unzoomed, not a pool record, its lookup run not wrapping) right after another in the
+; set's column order (the set's SS_HNEXT where the last one's
+; shape routine left it: nothing allocated between them), at the same x and width, in
+; the same tilemap-1 class, its top a whole number of tiles at or below the last one's
+; bottom (a gap of at most FZ_MGGAP rows) and the two within 32 rows: its tiles go into
+; the last one's columns (the gap transparent), the last one's head taller - no columns
+; of its own.  The picture is the same: the two are consecutive in the draw order and do
+; not overlap, and a Neo column's tiles carry their own palette and flips.  The boss
+; fights' sets are ~15% smaller (work/play/fh/mergecen.lua), their drops the double-
+; buffered sets over the ring's 338 columns.  On while the previous set took FZ_MGT
+; columns or more (fz_begin: FZ_MG_ON); the state at FZ_MG (the idle stack's deep end,
+; after the collision index: AUDIT 45's WATCH found no write to 0x10fc30..0x10fdaf).
+FZ_MG           equ $10fd9c
+FZ_MG_HN        equ FZ_MG           ; w: SS_HNEXT after the last record's shape (its column 0)
+FZ_MG_XW        equ FZ_MG+2         ; w: its w1 & $fff (x, width)
+FZ_MG_CL        equ FZ_MG+4         ; w: its w2 & $2000 (in front of tilemap 1)
+FZ_MG_Y         equ FZ_MG+6         ; w: its column's top (y)
+FZ_MG_R         equ FZ_MG+8         ; w: the column's rows
+FZ_MG_HV        equ FZ_MG+10        ; l: its head's SCB3 value in the set's head table
+FZ_MG_ON        equ FZ_MG+14        ; b: merging on for this pass
+FZ_MG_T         equ FZ_MG+16        ; w: (a merge) the column's rows after it
+FZ_MG_G         equ FZ_MG+18        ; w: the gap's rows
+	if FZ_MG+20>$10fdb0
+	fail    "FZ_MERGE's state past the checked RAM"
+	endif
+	ifne FZ_MGDIAG
+FZ_MGN          equ $d00f38         ; l: (OVR_DIAG's RAM: not together) merges
+FZ_MGC          equ $d00f3c         ; l: columns saved
+	endif
+; (a subroutine of fz_fastv's and fz_disp's dispatch: d2-d5 = w0-w3, a2 the lookup RAM, a3
+; the VRAM data port, a4 the next head slot, a6 the set; d7 credit | $7fff.  Not merged:
+; this piece the last one, rts (d2-d5, a0, a2-a6 kept); merged: on at fz_next.)
+fz_mg:
+	swap    d7                      ; (these tests' cost: the shape's own charge refills)
+	subi.w  #FZU_MGC,d7
+	swap    d7
+	move.w  d2,d0                   ; unzoomed, not a pool record: else no last
+	or.w    d3,d0
+	andi.w  #$f000,d0
+	bne.w   .inv
+	tst.b   d4
+	bmi.w   .inv
+	move.w  d2,d6                   ; d6 = rows, d1 = columns of this shape
+	rol.w   #7,d6
+	andi.w  #7,d6
+	addq.w  #1,d6
+	move.w  d3,d1
+	rol.w   #7,d1
+	andi.w  #7,d1
+	addq.w  #1,d1
+	move.w  d6,d0                   ; its lookup run must not wrap (as the shape's own
+	mulu.w  d1,d0                   ; test: map + rows x columns <= $4000)
+	neg.w   d0
+	addi.w  #$4000,d0
+	move.w  d5,-(sp)
+	andi.w  #$3fff,(sp)
+	cmp.w   (sp)+,d0
+	bcs.w   .inv
+	move.w  SS_HNEXT(a6),d0         ; consecutive?
+	cmp.w   FZ_MG_HN,d0
+	bne.w   .new
+	move.w  d3,d0                   ; the same x and width
+	andi.w  #$fff,d0
+	cmp.w   FZ_MG_XW,d0
+	bne.w   .new
+	move.w  d4,d0                   ; the same class
+	andi.w  #$2000,d0
+	cmp.w   FZ_MG_CL,d0
+	bne.w   .new
+	move.w  d2,d0                   ; the top: tile-aligned, at or below the last bottom
+	andi.w  #$1ff,d0
+	sub.w   FZ_MG_Y,d0
+	bcs.w   .new
+	moveq   #15,d1
+	and.w   d0,d1
+	bne.w   .new
+	lsr.w   #4,d0                   ; d0 = its first row in the column
+	move.w  d0,d1
+	sub.w   FZ_MG_R,d1              ; d1 = the gap's rows
+	bcs.w   .new
+	cmpi.w  #FZ_MGGAP,d1
+	bhi.w   .new
+	add.w   d6,d0                   ; the column's rows after it
+	cmpi.w  #32,d0
+	bhi.w   .new
+	; merge: charge first (FZU_MG0 + 3 units a tile row of each column; the refill may
+	; leave: the record is then done again, nothing written)
+	addq.l  #4,sp                   ; (no return: on at fz_next)
+	btst    #13,d4                  ; behind tilemap 1: as spr_lo (the set flagged)
+	bne.s   .fr
+	st      SS_PRIO(a6)
+	move.w  d1,-(sp)
+	swap    d7
+	subi.w  #LO_UNITS,d7
+	swap    d7
+	move.w  (sp)+,d1
+.fr:	move.w  d0,FZ_MG_T
+	move.w  d1,FZ_MG_G
+	add.w   d6,d1                   ; tile rows a column
+	move.w  d3,d0
+	rol.w   #7,d0
+	andi.w  #7,d0
+	addq.w  #1,d0
+	mulu.w  d1,d0
+	move.w  d0,d1
+	add.w   d1,d1
+	add.w   d1,d0
+	addi.w  #FZU_MG0,d0             ; d0 = the charge
+	swap    d7
+	sub.w   d0,d7
+	bpl.s   .c
+	jsr     spr_fast_refill         ; (d0 the charge, d7 swapped: returns only with credit)
+.c:	swap    d7
+	movem.l d2-d5/a0/a5,-(sp)
+	move.w  d3,d5                   ; d5 = the columns
+	rol.w   #7,d5
+	andi.l  #7,d5
+	addq.w  #1,d5
+	ifne FZ_MGDIAG
+	addq.l  #1,FZ_MGN
+	add.l   d5,FZ_MGC
+	endif
+	move.w  d4,d0                   ; the attribute: palette, the flips (w2 bit 14 x,
+	andi.w  #$1f00,d0               ; 15 y: Neo bit 0 x, 1 y)
+	addi.w  #NPAL_SPR<<8,d0
+	btst    #14,d4
+	beq.s   .f1
+	addq.w  #1,d0
+.f1:	btst    #15,d4
+	beq.s   .f2
+	addq.w  #2,d0
+.f2:	movea.w d0,a5                   ; a5 = the attribute
+	move.w  14(sp),d1               ; the lookup run (w3 as it came): a1 the first tile
+	andi.w  #$3fff,d1               ; to write of column 0
+	andi.w  #$3fff,d1
+	add.w   d1,d1
+	lea     (a2,d1.w),a1
+	move.w  d5,d3                   ; d3 = the row step in the run (2 x columns)
+	add.w   d3,d3
+	btst    #15,d4                  ; y flip: from the last row, upwards
+	beq.s   .f3
+	move.w  d6,d0
+	subq.w  #1,d0
+	mulu.w  d3,d0
+	adda.w  d0,a1
+	neg.w   d3
+.f3:	moveq   #2,d0                   ; the column step in the run: x flip from the last
+	btst    #14,d4                  ; column, leftwards
+	beq.s   .f4
+	move.w  d5,d0
+	subq.w  #1,d0
+	add.w   d0,d0
+	adda.w  d0,a1
+	moveq   #-2,d0
+.f4:	move.w  d0,-(sp)                ; 2(sp): the column step
+	move.w  FZ_MG_G,-(sp)           ; (sp): the gap's rows
+	move.w  FZ_MG_HN,d4             ; d4 = column 0's SCB1 + 2 x the column's rows so far
+	lsl.w   #6,d4
+	add.w   FZ_MG_R,d4
+	add.w   FZ_MG_R,d4
+	subq.w  #1,d5                   ; (dbra)
+.col:	move.w  d4,-2(a3)
+	move.w  (sp),d0                 ; the gap: transparent rows
+	bra.s   .g1
+.g:	move.w  #BLANK_TILE,(a3)
+	move.w  #0,(a3)
+.g1:	dbra    d0,.g
+	movea.l a1,a0                   ; this column's rows of the shape
+	move.w  d6,d0
+	subq.w  #1,d0
+.r:	move.w  (a0),d1
+	and.w   d7,d1
+	move.w  d1,(a3)
+	adda.w  d3,a0                   ; (between the two data writes: >= 12 cycles)
+	move.w  a5,(a3)
+	dbra    d0,.r
+	addi.w  #64,d4                  ; the next column
+	adda.w  2(sp),a1
+	dbra    d5,.col
+	addq.l  #4,sp
+	movea.l FZ_MG_HV,a0             ; the head: its rows
+	move.w  (a0),d0
+	andi.w  #$ffc0,d0
+	or.w    FZ_MG_T,d0
+	move.w  d0,(a0)
+	move.w  FZ_MG_T,FZ_MG_R
+	movem.l (sp)+,d2-d5/a0/a5
+	jmp     fz_next
+	; not merged: this record the last one (its shape allocates its columns below)
+.new:	move.w  d3,d1                   ; (d1: its columns, from w1 again)
+	rol.w   #7,d1
+	andi.w  #7,d1
+	addq.w  #1,d1
+	move.w  SS_HNEXT(a6),d0
+	sub.w   d1,d0
+	move.w  d0,FZ_MG_HN
+	move.w  d3,d0
+	andi.w  #$fff,d0
+	move.w  d0,FZ_MG_XW
+	move.w  d4,d0
+	andi.w  #$2000,d0
+	move.w  d0,FZ_MG_CL
+	move.w  d2,d0
+	andi.w  #$1ff,d0
+	move.w  d0,FZ_MG_Y
+	move.w  d6,FZ_MG_R
+	lea     SS_HVAL-SS_HADR(a4),a1
+	move.l  a1,FZ_MG_HV
+	rts
+.inv:	move.w  #$ffff,FZ_MG_HN
+	rts
 	endif
 
 	ifne FZ_SPLANCH

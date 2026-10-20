@@ -118,6 +118,26 @@ FZ_FASTR        equ 0               ; (hal/fz.s fz_rec: the fast record's way fi
 	ifnd FZ_FASTRCHK
 FZ_FASTRCHK     equ 0               ; (FZ_FASTR's shadow check: fz_reco builds each record again)
 	endif
+	ifnd FZ_SHED
+FZ_SHED         equ 0               ; (hal/fz.s: load shedding of the effects after a dropping pass, AUDIT 48)
+	endif
+	ifnd FZ_SHCALM
+FZ_SHCALM       equ 30              ; (FZ_SHED: passes without a drop before the level comes down)
+	endif
+	ifnd FZ_MERGE
+FZ_MERGE        equ 0               ; (hal/fz.s fz_mg: column merging, AUDIT 48)
+	endif
+	ifnd FZ_MGT
+FZ_MGT          equ 0               ; (FZ_MERGE: on after a set of at least this many columns)
+	endif
+	ifnd FZ_MGGAP
+FZ_MGGAP        equ 4               ; (FZ_MERGE: the most transparent rows between two merged)
+	endif
+	ifnd FZ_MGDIAG
+FZ_MGDIAG       equ 0               ; (FZ_MERGE: count merges and columns saved, OVR_DIAG's RAM)
+	endif
+FZU_MGC         equ 24              ; (FZ_MERGE: the tests, 16-cycle units)
+FZU_MG0         equ 48              ; (a merge's set-up and the head)
 	ifnd FZ_EARLYB
 FZ_EARLYB       equ 0               ; (hal/fz.s fz_due: a buffer begun a slot early only with the
 	endif                           ; game idle, AUDIT 46)
