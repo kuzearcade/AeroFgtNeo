@@ -21,6 +21,9 @@ GX_UPD_END      equ $107060
 
 ; ---------------------------------------------------------------- 1
 gx_upd:
+	ifne GX_BAND
+	addq.w  #1,GXB_PASS             ; (7: a new pass - the collision index is stale)
+	endif
 	movea.l #$1010c0,a0             ; (the original's first instruction)
 	bra.s   gx_upds
 gx_updn:
@@ -279,6 +282,13 @@ gx_scan:
 	bls.s   .b
 	move.w  d6,d5
 .b:	swap    d6
+	ifne GX_BAND
+	cmpa.l  #GXB_SHLO,a0            ; a shot of the shot region: the index (7)
+	bcs.s   gx_scanp
+	cmpa.l  #GXB_SHHI,a0
+	bcs.w   gx_band
+gx_scanp:                               ; (7: the slots scanned, d4-d6 on the stack)
+	endif
 	movea.l #$1019c0,a2             ; (0x2a166)
 	move.w  #$17,d7
 	bsr.s   .pool
@@ -429,6 +439,338 @@ gxsv:	bcs.s   .m
 .m:	addq.l  #1,HAL_GX_MISS
 .k:	movem.l (sp)+,d0-d3
 	rts
+	endif
+
+	ifne GX_BAND
+; ---------------------------------------------------------------- 7 (GX_BAND)
+; AUDIT 43, the collision index: shot_collide's shots (a0 in the shot region,
+; 0x1022c0..0x1040c0, between the first target pool and the second) visit only the
+; targets near them.  The main object loop runs the region's slots in one stretch, after
+; the first pool's handlers and before the others': between two of its calls nothing
+; moves, spawns or arms a target (traced over 4 x 57k frames of every nation, the arcade:
+; work/play/fh/gxtrace.lua - the one change is a target the hit code took, bit 5: the
+; candidacy is tested again at the visit).  So the index is built at the pass's first
+; call from the region (gx_upd counts the passes) and kept for the pass; calls from
+; elsewhere (the bomb pieces, objects in the pools) scan the slots as gx_scan does.
+;   The index: the targets ((b0 & $31) = 1) of the three pools in slot order, each with
+; its x extent - the least and the largest of its x words (80/84, and 88/92 with 76 set).
+; A target whose extent misses the shot's clipped range (d4/d5, as gx_scan's: max < d4
+; or min > d5, either order) cannot pass the x block of either hitbox, and a failed x
+; block has no side effect but d1/d3: skipping it is what the original's would have done.
+; (AUDIT 43's x bands, built: an entry in ~2.8 band lists cost the build ~600 cycles a
+; target, more than the bands saved the shots - the extent compare is ~50 cycles a
+; skipped entry.)  More than GXB_CAP targets: the pass's calls scan (gx_scanp).
+;   Out as the original: a hit through 0x2a1c0 with a2 the slot and d7 its pool count
+; left (the dbra's: gx_bd7); no hit: d0 = 0, C clear, a2 past the last pool, d7 = -1, X
+; the last slot's subq (as gx_scan), and d1/d3 as the slots' last target left them - the
+; last one tested here, or (skipped) its failed x block's (its second hitbox's with 76
+; set), computed; none: as they came.  GX_VERIFY: a side-effect-free scan of every slot
+; with the original tests (0x2a1f6, 0x2a26a) first; its hit slot, or its d1/d3, compared
+; (HAL_GX_MISS).
+GXB_BASE        equ $10fc40         ; the index: the idle stack's deep end, after G_TRAMP's 48
+                                    ; bytes (the stack's live top < 64 bytes; no write to
+                                    ; 0x10fc30..0x10fdaf after the boot in 3 x 40k frames:
+                                    ; work/play/fh/ramfree.lua WATCH)
+GXB_SHLO        equ $1022c0         ; the shot region
+GXB_SHHI        equ $1040c0
+GXB_PASS        equ GXB_BASE        ; w: the main loop's passes (gx_upd)
+GXB_BUILT       equ GXB_BASE+2      ; w: the pass the index is for, + 1
+GXB_END         equ GXB_BASE+4      ; l: the list's end
+GXB_OVF         equ GXB_BASE+8      ; b: more targets than GXB_CAP: this pass scans
+GXB_LIST        equ GXB_BASE+10     ; GXB_CAP x (min w, max w, index x 4 w)
+GXB_CAP         equ 56
+GXB_LEND        equ GXB_LIST+GXB_CAP*6   ; (0x10fd9a)
+GXB_VHIT        equ $d00f00         ; (GX_VERIFY, OVR_DIAG's RAM: not together) l: the
+GXB_VD1         equ $d00f04         ; reference's hit slot (0: none); w: its d1, d3
+GXB_VD3         equ $d00f06
+GXB_NQ          equ $d00f08         ; l: indexed calls
+GXB_NBUILD      equ $d00f0c         ; l: builds
+GXB_NOVF        equ $d00f14         ; l: calls scanned for a full list
+GXB_NVIS        equ $d00f18         ; l: entries in range (tested again)
+
+; (entered from gx_scan with d4-d6 on the stack, d4/d5/d6 and a3 set)
+gx_band:
+	movem.l a1/a4-a6,-(sp)
+	move.w  GXB_PASS,d0
+	addq.w  #1,d0
+	cmp.w   GXB_BUILT,d0
+	beq.s   .ok
+	bsr.w   gx_bbuild
+.ok:	tst.b   GXB_OVF
+	bne.s   .full
+	ifne GX_VERIFY
+	bsr.w   gx_bref
+	addq.l  #1,GXB_NQ
+	endif
+	bsr.s   .q
+	movem.l (sp)+,a1/a4-a6
+	movem.l (sp)+,d4-d6
+	rts
+.full:	movem.l (sp)+,a1/a4-a6          ; (too many targets: gx_scan's scan)
+	ifne GX_VERIFY
+	addq.l  #1,GXB_NOVF
+	endif
+	bra.w   gx_scanp
+	; the targets in slot order: those whose extent meets [d4, d5] tested
+.q:	lea     GXB_LIST,a1
+	movea.l GXB_END,a4
+	lea     gx_bslot,a6
+	suba.l  a5,a5                   ; a5: the last target tested
+.v:	cmpa.l  a4,a1
+	bcc.w   .end
+	cmp.w   (a1)+,d5                ; its least x word over the range's right: skipped
+	bcs.s   .s4
+	cmp.w   (a1)+,d4                ; its largest under the range's left: skipped
+	bhi.s   .s2
+	move.w  (a1)+,d0
+	movea.l 0(a6,d0.w),a2
+	ifne GX_VERIFY
+	addq.l  #1,GXB_NVIS
+	endif
+	move.b  (a2),d0                 ; still a target? (a hit this pass may have taken it)
+	andi.w  #$31,d0
+	subq.w  #1,d0
+	bne.w   .v
+	movea.l a2,a5
+	move.w  84(a2),d1               ; (as gx_scan's .cand)
+	cmp.w   d4,d1
+	bcs.s   .f1
+	move.w  80(a2),d1
+	cmp.w   d1,d5
+	bcs.s   .f2
+	pea     .r1(pc)
+	jmp     $2a22c                  ; the test's y block
+.r1:	bcs.s   .hit
+	bra.s   .sec
+.s4:	addq.l  #4,a1
+	bra.w   .v
+.s2:	addq.l  #2,a1
+	bra.w   .v
+.f1:	move.w  d6,d3
+	bra.s   .sec
+.f2:	swap    d6
+	move.w  d6,d3
+	swap    d6
+.sec:	tst.b   76(a2)                  ; the second hitbox
+	beq.w   .v
+	move.w  92(a2),d1
+	cmp.w   d4,d1
+	bcs.s   .g1
+	move.w  88(a2),d1
+	cmp.w   d1,d5
+	bcs.s   .g2
+	pea     .r2(pc)
+	jmp     $2a2a0
+.r2:	bcs.s   .hit
+	bra.w   .v
+.g1:	move.w  d6,d3
+	bra.w   .v
+.g2:	swap    d6
+	move.w  d6,d3
+	swap    d6
+	bra.w   .v
+	; a hit: d7 as the pool scan's dbra left it (a word: its high word stays the
+	; caller's), then the original's hit code (its rts back to .q's bsr, C set)
+.hit:	move.w  -2(a1),d0
+	lsr.w   #1,d0
+	lea     gx_bd7,a6
+	move.w  0(a6,d0.w),d7
+	ifne GX_VERIFY
+	cmpa.l  GXB_VHIT,a2
+	beq.s   .hv
+	addq.l  #1,HAL_GX_MISS
+.hv:
+	endif
+	jmp     $2a1c0
+	; no hit: d1/d3 as the slots' last target left them
+.end:	lea     GXB_LIST,a1             ; the last target: the list from its end
+.e1:	cmpa.l  a1,a4
+	bls.s   .e3                     ; (none: d1/d3 as they came)
+	move.w  -(a4),d0
+	subq.l  #4,a4
+	movea.l 0(a6,d0.w),a2
+	move.b  (a2),d0
+	andi.w  #$31,d0
+	subq.w  #1,d0
+	bne.s   .e1
+	cmpa.l  a5,a2
+	beq.s   .e3                     ; (tested here: as the test left them)
+	moveq   #84,d0                  ; skipped: its x block failed, the second hitbox's
+	tst.b   76(a2)                  ; with 76 set
+	beq.s   .e2
+	moveq   #92,d0
+.e2:	move.w  0(a2,d0.w),d1           ; the right word below the left bound: d1, d3 as the
+	cmp.w   d4,d1                   ; block's first compares leave them
+	bcs.s   .e4
+	move.w  -4(a2,d0.w),d1          ; else its left word over the right bound: its last
+	swap    d6                      ; two
+	move.w  d6,d3
+	swap    d6
+	bra.s   .e3
+.e4:	move.w  d6,d3
+.e3:
+	ifne GX_VERIFY
+	tst.l   GXB_VHIT
+	bne.s   .em
+	cmp.w   GXB_VD1,d1
+	bne.s   .em
+	cmp.w   GXB_VD3,d3
+	beq.s   .ek
+.em:	addq.l  #1,HAL_GX_MISS
+.ek:
+	endif
+	movea.l #$1052c0+$30*$60,a2     ; (past the last pool)
+	move.w  #-1,d7
+	move.b  -$60(a2),d0             ; (the last slot's subq: its X)
+	andi.w  #$31,d0
+	subq.w  #1,d0
+	jmp     $2a1b8                  ; (clr.l d0, C clear, rts: back to .q's bsr)
+
+; the index for this pass (d1/d3 kept: they leave as they came when no target is tested)
+GXBS	macro                           ; (\1: the slot's offset from 0x1019c0, \2 its index)
+	move.b  \1(a2),d0
+	beq.s   .s\@
+	andi.b  #$31,d0
+	subq.b  #1,d0
+	bne.s   .s\@
+	move.w  #\2*4,d2
+	bsr.w   gx_bcand
+.s\@:
+	endm
+gx_bbuild:
+	movem.l d1-d3/a1-a2/a4,-(sp)
+	ifne GX_VERIFY
+	addq.l  #1,GXB_NBUILD
+	endif
+	move.w  GXB_PASS,d0
+	addq.w  #1,d0
+	move.w  d0,GXB_BUILT
+	clr.b   GXB_OVF
+	lea     GXB_LIST,a4             ; a4: the list's end
+	movea.l #$1019c0,a2
+GXI	set     0
+	rept    $18
+	GXBS    GXI*$60,GXI
+GXI	set     GXI+1
+	endr
+	rept    $10
+	GXBS    $1040c0-$1019c0+(GXI-$18)*$60,GXI
+GXI	set     GXI+1
+	endr
+	rept    $30
+	GXBS    $1052c0-$1019c0+(GXI-$28)*$60,GXI
+GXI	set     GXI+1
+	endr
+	move.l  a4,GXB_END
+	movem.l (sp)+,d1-d3/a1-a2/a4
+	rts
+; a target (d2 its index x 4): its extent and index at a4
+gx_bcand:
+	cmpa.l  #GXB_LEND,a4
+	bcc.s   .ov
+	lea     gx_bslot,a1
+	movea.l 0(a1,d2.w),a1
+	move.w  80(a1),d1               ; d1 = its least x word, d3 the largest
+	move.w  84(a1),d3
+	cmp.w   d1,d3
+	bcc.s   .a1
+	exg     d1,d3
+.a1:	tst.b   76(a1)
+	beq.s   .a6
+	move.w  88(a1),d0
+	cmp.w   d1,d0
+	bcc.s   .a3
+	move.w  d0,d1
+.a3:	cmp.w   d3,d0
+	bls.s   .a4
+	move.w  d0,d3
+.a4:	move.w  92(a1),d0
+	cmp.w   d1,d0
+	bcc.s   .a5
+	move.w  d0,d1
+.a5:	cmp.w   d3,d0
+	bls.s   .a6
+	move.w  d0,d3
+.a6:	move.w  d1,(a4)+
+	move.w  d3,(a4)+
+	move.w  d2,(a4)+
+	rts
+.ov:	st      GXB_OVF
+	rts
+
+; the slots of the list's indexes, in order, and the pool scan's d7 at each
+gx_bslot:
+GXI	set     0
+	rept    $18
+	dc.l    $1019c0+GXI*$60
+GXI	set     GXI+1
+	endr
+GXI	set     0
+	rept    $10
+	dc.l    $1040c0+GXI*$60
+GXI	set     GXI+1
+	endr
+GXI	set     0
+	rept    $30
+	dc.l    $1052c0+GXI*$60
+GXI	set     GXI+1
+	endr
+gx_bd7:
+GXI	set     0
+	rept    $18
+	dc.w    $17-GXI
+GXI	set     GXI+1
+	endr
+GXI	set     0
+	rept    $10
+	dc.w    $f-GXI
+GXI	set     GXI+1
+	endr
+GXI	set     0
+	rept    $30
+	dc.w    $2f-GXI
+GXI	set     GXI+1
+	endr
+
+	ifne GX_VERIFY
+; (GX_VERIFY) the reference: every slot in order with the original tests, no side effects
+; (the hit code not run): its hit slot or 0, and d1/d3 as it leaves them.  Keeps all.
+gx_bref:
+	movem.l d0-d3/d7/a2,-(sp)
+	clr.l   GXB_VHIT
+	movea.l #$1019c0,a2
+	move.w  #$17,d7
+	bsr.s   .pool
+	bcs.s   .x
+	movea.l #$1040c0,a2
+	moveq   #$f,d7
+	bsr.s   .pool
+	bcs.s   .x
+	movea.l #$1052c0,a2
+	moveq   #$2f,d7
+	bsr.s   .pool
+.x:	move.w  d1,GXB_VD1
+	move.w  d3,GXB_VD3
+	movem.l (sp)+,d0-d3/d7/a2
+	rts
+.pool:	move.b  (a2),d0
+	andi.w  #$31,d0
+	subq.w  #1,d0
+	bne.s   .n
+	jsr     $2a1f6
+	bcs.s   .h
+	tst.b   76(a2)
+	beq.s   .n
+	jsr     $2a26a
+	bcs.s   .h
+.n:	lea     $60(a2),a2
+	dbra    d7,.pool
+	andi.b  #$fe,ccr
+	rts
+.h:	move.l  a2,GXB_VHIT
+	ori.b   #1,ccr
+	rts
+	endif
 	endif
 	endif
 

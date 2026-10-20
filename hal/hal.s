@@ -106,6 +106,9 @@ FZ_SPLANCH      equ 1               ; (FUSED=1: hal/fz.s fz_split_anch - a split
 	ifnd GX_SCAN
 GX_SCAN         equ 0               ; (hal/gx.s 6: shot_collide's three pool scans with the
 	endif                           ; shot's x bounds hoisted and a tight loop over active slots)
+	ifnd GX_BAND
+GX_BAND         equ 0               ; (hal/gx.s 7, with GX_SCAN: AUDIT 43/45's collision index -
+	endif                           ; the targets and their x extents once a pass, for the shots)
 	ifnd GX_VEL
 GX_VEL          equ 0               ; (hal/gx.s 5: the velocity products from a table)
 	endif

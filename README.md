@@ -59,7 +59,7 @@ Run the converter from the project root. The release build uses the direct video
 
 ```sh
 AEROFGT_DIRECT=1 \
-AEROFGT_DEFS="FUSED=1,GX_XPRE=1,FZ_PD=1,GX_SCAN=1,FZ_TPL=1,FX_HOV=1,BG_HIDECLR=1,BG_SETSCR=1,UB_LOGO=1,BG_CUTCAP=1,BG_SCRRING=1,SPR_FLIPRES=1,FX_HOVCHG=1" \
+AEROFGT_DEFS="FUSED=1,GX_XPRE=1,FZ_PD=1,GX_SCAN=1,FZ_TPL=1,FX_HOV=1,BG_HIDECLR=1,BG_SETSCR=1,UB_LOGO=1,BG_CUTCAP=1,BG_SCRRING=1,SPR_FLIPRES=1,FX_HOVCHG=1,GX_BAND=1" \
 python3 -I tools/aerofgt2neo.py --aerofgt mame_roms/aerofgt.zip --secref mame_roms/sonicwi3.zip --out out
 ```
 
@@ -80,11 +80,11 @@ New work is added behind `AEROFGT_DEFS` switches. A build with a new switch turn
 
 The release command above, with the emblem image made by `tools/make_vslogo.py`, produces exactly these files. If yours differ, check that your `aerofgt.zip` is the MAME dump the converter expects; it stops with an error if a file's CRC is wrong. The Neo Geo set given with `--secref` does not change them: `sonicwi3.zip` and `sonicwi2.zip` give the same files.
 
-The cartridge set, `out/aerofgtn/` (release fz64):
+The cartridge set, `out/aerofgtn/` (release fz69):
 
 | File | Size | CRC32 | SHA1 |
 |---|---|---|---|
-| `538-p1.p1` | 1,048,576 | `756715d7` | `9cad31b28f433479ecc5d5032178947d5160dbe8` |
+| `538-p1.p1` | 1,048,576 | `c2531b64` | `f5d797f8a8a4f98589d5c0ff12bda9a25ad58e96` |
 | `538-s1.s1` | 131,072 | `0d03fe97` | `66c4bd3fd4f96b6e091a3dd940f2b3dbd9532a57` |
 | `538-m1.m1` | 131,072 | `099dcce7` | `72afbb063e1be6a013c5d0921b76763f1383879e` |
 | `538-v1.v1` | 2,097,152 | `b72e6abe` | `a7276d1cb693286fe87f945c9254e2f62bf28acb` |
@@ -125,25 +125,24 @@ The test tools live in `tests/` and `work/play/`. The main ones:
 
 ## Current status
 
-The current release is **fz64** (2026-10-19). It runs on the MiSTer and in MAME, has been played through on both, and has no known reboots or display faults.
+The current release is **fz69** (2026-10-20). It runs on the MiSTer and in MAME, has been played through on both, and has no known reboots or display faults.
 
-Lost logic frames are frames where the game's logic misses a vblank. The original arcade loses some too. In the profile matrix, the conversion loses fewer than the arcade in three of the four nations:
+Lost logic frames are frames where the game's logic misses a vblank. The original arcade loses some too. In the profile matrix, the conversion loses fewer than the arcade in every nation:
 
 | Nation | Conversion | Arcade |
 |---|---|---|
-| 0 | 3.53% | 3.31% |
-| 1 | 5.01% | 6.12% |
-| 2 | 6.99% | 8.81% |
-| 3 | 6.99% | 7.69% |
+| 0 | 1.81% | 3.31% |
+| 1 | 2.80% | 6.12% |
+| 2 | 5.09% | 8.81% |
+| 3 | 5.58% | 7.69% |
 
-Sprite sets shown one frame late average 10 to 14% of frames. Dropped sprite frames are 0.1 to 1.0% of frames, mostly in the densest boss fights. Overruns past the vblank deadline number a few per 600,000 frames in nations 0 to 2 and 38 in nation 3.
+Sprite sets shown one frame late average 6 to 12% of frames. Dropped sprite frames are 0.1 to 0.8% of frames, mostly in the densest boss fights. Overruns past the vblank deadline number 2 per 600,000 frames in nations 0 to 2 and 22 in nation 3.
 
 The detailed engineering record, with every experiment and its measurements, is `work/catalog/AUDIT.md`.
 
 ## To do
 
-- **Banded collision index.** Precompute the collision targets by screen band once a frame, to cut the collision scan's cost in the busiest stages. The design is written up in section 43 of the audit.
-- **Dense scenes in nation 3.** The night fleet's densest stretches still trail the arcade by one to two points of lost logic, and nation 3 has most of the overruns.
+- **Dense scenes in nation 3.** The night fleet's densest stretches (70 or more active objects) still trail the arcade by a few points of lost logic, and nation 3 has most of the overruns.
 - **Sprite drops in boss fights.** The remaining drops come from a capacity limit of the Neo Geo sprite column ring. Every column-sharing and matching scheme tried so far has been rejected. Load shedding is the one approach left.
 - **The bullet pool.** Three versions of a separate pool for bullets and player shots were built and measured (sections 40, 42 and 44 of the audit). None beat the release. Two tuning knobs remain untried, but neither is expected to help the player shots.
 
