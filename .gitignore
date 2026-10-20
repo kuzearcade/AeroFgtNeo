@@ -79,6 +79,12 @@
 !/work/catalog/
 /work/catalog/*
 !/work/catalog/AUDIT.md
+# the build's object catalogue and template ranking (table addresses, counts, sizes; read by
+# tools/aerofgt2neo.py); the sprite renders beside them stay out
+!/work/catalog/sprites/
+/work/catalog/sprites/*
+!/work/catalog/sprites/objects.json
+!/work/catalog/sprites/tpl_rank.txt
 
 # --- editor, Python and backup leftovers
 __pycache__/
