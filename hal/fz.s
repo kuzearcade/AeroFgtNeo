@@ -1156,6 +1156,15 @@ fz_reset:
 	ifne FZ_PD
 	clr.w   FZ_HCOK                 ; (the HUD cache: no slot trusted)
 	endif
+	ifne FZ_OVF
+	clr.w   FZ_OVFP                 ; (FZ_OVF, FZ_SHED: their state in the idle stack's deep
+	endif                           ; end - the boot RAM test leaves its patterns there)
+	ifne FZ_SHED
+	clr.w   FZ_SH_LV
+	clr.b   FZ_SH_P
+	clr.l   FZ_SHN
+	move.l  HAL_SPR_DROP,FZ_SH_D
+	endif
 	move.w  HAL_SPR_W,d0            ; a pass in work read records just lost (a stage
 	bmi.s   .nw                     ; change wipes the sprite RAM: it went on through
 	lea     HAL_SPR_ST,a0           ; wiped pointers to address 0 - a reboot loop at

@@ -118,6 +118,12 @@ FZ_FASTR        equ 0               ; (hal/fz.s fz_rec: the fast record's way fi
 	ifnd FZ_FASTRCHK
 FZ_FASTRCHK     equ 0               ; (FZ_FASTR's shadow check: fz_reco builds each record again)
 	endif
+	ifnd FZ_OVF
+FZ_OVF          equ 0               ; (hal/spr.s: a set out of columns beside the shown one goes on (1: in
+	endif                           ; the vblank after its flip, 2: until complete), AUDIT 51
+	ifnd FZ_OVFDIAG
+FZ_OVFDIAG      equ 0               ; (FZ_OVF: count them, OVR_DIAG's RAM)
+	endif
 	ifnd FZ_SHED
 FZ_SHED         equ 0               ; (hal/fz.s: load shedding of the effects after a dropping pass, AUDIT 48)
 	endif

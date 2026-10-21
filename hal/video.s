@@ -267,6 +267,15 @@ hal_vid_commit:
 	move.w  #SPR_RES_COMMIT,HAL_SPR_RES     ; sprites not (all) converted before the
 	move.w  #SPR_TAIL+FZ_TAILX,HAL_SPR_TAILU ; real vblank: go on with what is left
 	bsr     hal_spr_work
+	ifeq FZ_OVF-1
+	tst.b   FZ_OVFC                 ; (FZ_OVF 1: a continuation not complete by now: its
+	beq.s   .ovn                    ; heads so far written, the rest dropped - before
+	move.l  d1,-(sp)                ; the deadline, in this vblank)
+	moveq   #1,d1
+	jsr     spr_ovfend
+	move.l  (sp)+,d1
+.ovn:
+	endif
 	clr.w   HAL_SPR_TAILU
 	OVT     8
 	moveq   #1,d0                   ; no room for the rest (the sprites may run into

@@ -212,6 +212,19 @@ ring_spr_work:
 	moveq   #0,d0
 	rts
 	endif
+	ifne FZ_OVF
+	ifeq FZ_OVF-1
+	tst.b   FZ_OVFC                 ; (FZ_OVF 1: a continuation outside the commit's vblank
+	beq.s   .oc                     ; would write shown columns on the screen: over; 2: it
+	tst.w   HAL_SPR_TAILU           ; goes on, its columns below the ring's tail, their
+	bne.s   .oc                     ; heads written when it is complete)
+	move.l  d1,-(sp)
+	moveq   #1,d1
+	bsr     spr_ovfend
+	move.l  (sp)+,d1
+.oc:
+	endif
+	endif
 	tst.b   HAL_OUT                 ; (out of time already)
 	bne.w   .no
 	ifeq FUSED-1
@@ -392,6 +405,16 @@ ring_spr_work:
 	bra.w   .ok
 .fin:
 	OVS     3
+	ifne FZ_OVF
+	tst.b   FZ_OVFC                 ; (FZ_OVF: the continuation complete: its heads
+	beq.s   .fo                     ; written, the set stays shown)
+	move.w  HAL_SPR_W,d0
+	cmp.w   FZ_OVFW,d0
+	bne.s   .fo
+	moveq   #0,d1
+	bra     spr_ovfend
+.fo:
+	endif
 	if (DIRECT=1)&(FUSED=0)
 	cmpi.b  #1,FX_DELTA             ; (hal/dl.s: an update in place: pending, or
 	bne.s   .fi                     ; waiting behind the pending one)
@@ -428,6 +451,71 @@ ring_spr_work:
 	move.w  #-1,HAL_SPR_W
 	clr.l   HAL_SPR_RA5
 	rts
+
+	ifne FZ_OVF
+; (FZ_OVF, AUDIT 51) the state: in the idle stack's deep end (AUDIT 45's WATCH: no write
+; to 0x10fc30..0x10fdaf), the bytes left between FZ_SHED's, the collision index's and
+; FZ_MERGE's
+FZ_OVFP         equ $10fc3c         ; b: the set in work waits for its flip to go on
+FZ_OVFC         equ $10fc3d         ; b: the shown set goes on in this vblank
+FZ_OVFW         equ $10fc3e         ; w: that set
+FZ_OVFH         equ $10fd9a         ; w: its SS_HOFF at the flip (the heads it wrote)
+	ifne FZ_OVFDIAG
+FZ_OVFN         equ $d00f30         ; l: (OVR_DIAG's RAM: not together) overflows begun
+FZ_OVFOK        equ $d00f34         ; l: completed in the vblank
+FZ_OVFX         equ $d00f38         ; l: cut at the deadline (the rest dropped)
+	endif
+; The continuation over (d1 = 0 complete, 1 not): the heads since the flip written (their
+; SCB3: shown now - in the vblank), the rest of the records dropped (not complete), the set
+; done as .fin does but shown.  Keeps all.
+spr_ovfend:
+	movem.l d0-d3/a0-a1/a3-a4/a6,-(sp)
+	sf      FZ_OVFC
+	move.w  FZ_OVFW,d0
+	bsr     hal_spr_set
+	move.w  FZ_OVFW,d0              ; (hal_spr_set: d0 x 4)
+	lea     REG_VRAMRW,a3
+	lea     REG_VRAMADDR,a4
+	move.w  FZ_OVFH,d2
+	lea     SS_HADR(a6),a0
+	lea     SS_HVAL(a6),a1
+	adda.w  d2,a0
+	adda.w  d2,a1
+	move.w  SS_HOFF(a6),d3
+	sub.w   d2,d3
+	lsr.w   #1,d3
+	bra.s   .w1
+.w:	move.w  (a0)+,(a4)
+	move.w  (a1)+,(a3)
+.w1:	dbra    d3,.w
+	tst.w   d1
+	beq.s   .ok
+	addq.l  #1,HAL_SPR_DROP         ; (cut: the rest dropped)
+	addq.l  #1,HAL_SPR_DROPN
+	bset    #2,HAL_SLIP+1
+	lea     HAL_SPR_MIX,a0
+	bset    #1,(a0,d0.w)
+	ifne FZ_OVFDIAG
+	addq.l  #1,FZ_OVFX
+	bra.s   .c
+	endif
+.ok:
+	ifne FZ_OVFDIAG
+	addq.l  #1,FZ_OVFOK
+	endif
+.c:	move.w  d0,d1                   ; (its size: the next start's estimate, as .fin)
+	add.w   d1,d1
+	lea     HAL_SPR_START,a0
+	move.w  (a0,d1.w),d2
+	sub.w   SS_HNEXT(a6),d2
+	move.w  d2,HAL_SPR_PREV
+	jsr     fz_fin
+	move.w  #-1,HAL_SPR_W
+	clr.l   HAL_SPR_RA5
+	sf      HAL_SPR_BLK
+	movem.l (sp)+,d0-d3/a0-a1/a3-a4/a6
+	rts
+	endif
 
 ; a5 = the end of the list (its bit-14 word, or 0x200 words on: MAME's limit), from
 ; which hal_spr_go works back.  22 cycles a word: lists are < 0x80 words but at boot
@@ -1685,6 +1773,54 @@ COLS	macro                           ; \1: column step x2 (addq / subq)
 	endif
 	bra.w   .ent
 .hdrop:
+	ifne FZ_OVF
+	; (FZ_OVF, AUDIT 51) nothing frees columns because the ring holds only the shown set
+	; and this one, and the shown set's columns lie below this one's (its last records,
+	; the back-most, belong below): instead of the drop, this set complete for its flip
+	; but still converting - it waits (as for columns), the flip shows it and frees the
+	; shown set, and the commit goes on with its records in the same vblank, into the
+	; freed columns (spr_ovfend: their heads written, the rest dropped at the deadline)
+	tst.b   FZ_OVFC                 ; (the continuation: no second overflow)
+	bne.w   .hd0
+	cmpi.b  #2,HAL_SPR_ORDN
+	bne.w   .hd0
+	movem.l d0-d2/a1,-(sp)
+	move.w  HAL_SPR_SHOWN,d0        ; the ring: the shown set, then this one
+	bmi.s   .hdn
+	move.w  HAL_SPR_W,d1
+	cmp.b   HAL_SPR_ORD,d0
+	bne.s   .hdn
+	cmp.b   HAL_SPR_ORD+1,d1
+	bne.s   .hdn
+	move.b  HAL_SPR_SPS,d2
+	cmp.b   d1,d2                   ; this one split: its lower run under the shown set
+	beq.s   .hdn
+	lea     HAL_SPR_START,a1
+	cmp.b   d0,d2
+	beq.s   .hs
+	add.w   d0,d0                   ; the shown set wholly below this one's next column
+	move.w  (a1,d0.w),d2
+	cmp.w   SS_HNEXT(a6),d2
+	bhi.s   .hdn
+	bra.s   .hy
+.hs:	add.w   d1,d1                   ; the shown set split: this one in its hole (under
+	move.w  (a1,d1.w),d2            ; its top run): the freed lower run below
+	cmp.w   HAL_SPR_SPJ,d2
+	bhi.s   .hdn
+.hy:	move.w  HAL_SPR_W,d0
+	lea     HAL_SPR_ST,a1
+	move.b  #1,(a1,d0.w)            ; complete for the flip, still converting
+	move.w  d0,FZ_OVFW
+	st      FZ_OVFP
+	ifne FZ_OVFDIAG
+	addq.l  #1,FZ_OVFN
+	endif
+	movem.l (sp)+,d0-d2/a1
+	st      HAL_SPR_BLK             ; (waits: hal_spr_anyc finds it complete)
+	bra.w   .late
+.hdn:	movem.l (sp)+,d0-d2/a1
+.hd0:
+	endif
 	if (DIRECT=1)&(RES=0)&(FUSED=0)
 	jsr     dl_drop                 ; (hal/dl.s: the first one recorded)
 	endif
@@ -1696,7 +1832,12 @@ COLS	macro                           ; \1: column step x2 (addq / subq)
 	; at SPR_PB: start the set again from SPR_PT (once), the whole list, if the top
 	; has more room than it had, or will get some (a complete set waits for its flip,
 	; which frees the oldest: the top grows down into it); else drop
-.rst:	tst.b   HAL_SPR_SPS             ; (a split set holds the top)
+.rst:
+	ifne FZ_OVF
+	tst.b   FZ_OVFC                 ; (FZ_OVF: the continuation does not start again at
+	bne.w   .hdrop                  ; the top - above the set: in front of it)
+	endif
+	tst.b   HAL_SPR_SPS             ; (a split set holds the top)
 	bpl.w   .hdrop
 	move.w  HAL_SPR_W,d0
 	lea     HAL_SPR_RST,a1
@@ -2233,6 +2374,16 @@ ring_spr_flip:
 	movea.l (sp)+,a0
 	endif
 	move.b  #3,(a1,d6.w)
+	ifne FZ_OVF
+	tst.b   FZ_OVFP                 ; (FZ_OVF: the set waiting to go on shown: its heads
+	beq.s   .ov0                    ; so far written above; the commit goes on with it
+	cmp.w   FZ_OVFW,d6              ; in this vblank)
+	bne.s   .ov0
+	move.w  SS_HOFF(a5),FZ_OVFH
+	sf      FZ_OVFP
+	st      FZ_OVFC
+.ov0:
+	endif
 	lea     HAL_SPR_RDY,a0          ; older complete sets: never shown
 	moveq   #NSPRSETS-1,d0
 	moveq   #2*(NSPRSETS-1),d2
