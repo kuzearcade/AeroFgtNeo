@@ -129,6 +129,11 @@ tm_apply:
 	dbra    d0,.hm
 	clr.l   FX1_PEND
 	st      FX1_CLR                 ; (hal/tx.s hal_bg_l1place: at the commit)
+	ifne BG_FIXCLR
+	tst.w   HAL_FIXUSED             ; (BG_FIXCLR) its text on the fix layer too, all of it
+	beq.s   .hd                     ; before any column (hal_bg_convert: hal_fix_clear); the
+	clr.w   HAL_FIXCLR              ; columns' own clears left it until their turn came, a
+	endif                           ; wipe of 12 frames under BG_CUTCAP
 .hd:
 	endif
 	subq.l  #1,HAL_BGMISS           ; (told, not found: HAL_BGMISS counts finds)

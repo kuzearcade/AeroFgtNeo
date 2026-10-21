@@ -48,6 +48,9 @@ HAL_WHOLD       equ $d00f98         ; l: those holds
 DL_GATE         equ 0               ; (hal/dl.s: > 0: an update in place is tried only with this many
 	endif                           ; lines + 3 a piece to spare before the real vblank)
 DL_GATEN        equ $d00f9c         ; l: tries the gate skipped
+	ifnd BG_FIXCLR
+BG_FIXCLR       equ 0               ; (2026-10-21, hal/tm.s: BG_HIDECLR's layer-1 clear also clears its text
+	endif                           ; on the fix layer, AUDIT 55)
 	ifnd BG_CUTCAP
 BG_CUTCAP       equ 0               ; (2026-10-19, AUDIT 39 option 1: a cleared layer's columns at most BG_CAP a
 	endif                           ; slot - it is hidden, there is no deadline; 6 lost frames a cut before)
@@ -129,6 +132,9 @@ FZ_OVFPB        equ 0               ; (FZ_OVF: the pool bullets of a set flipped
 	endif                           ; done - counted so far, again at its end; AUDIT 53)
 	ifnd FZ_FLIPM
 FZ_FLIPM        equ 0               ; (hal/spr.s: lines added to the flip's time estimate, AUDIT 53)
+	endif
+	ifnd SD_FREE
+SD_FREE         equ 0               ; (hal_dips: the FREE PLAY soft DIP, DSW1 all on)
 	endif
 	ifnd FZ_HOLE
 FZ_HOLE         equ 0               ; (FZ_OVF=2: a set split around the shown one keeps that set's
@@ -1367,6 +1373,12 @@ hal_dips:
 	add.w   d4,d4
 	adda.w  d4,a0
 	dbra    d1,.o
+	ifne SD_FREE
+	cmpi.b  #1,HAL_SOFTDIP+6+SOFTDIP_FREE
+	bne.s   .pay
+	moveq   #0,d2                   ; FREE PLAY: bank 1 all on, as the arcade's
+.pay:
+	endif
 	move.b  d2,IO_MIRROR+$27        ; DSW1
 	move.b  d3,IO_MIRROR+$29        ; DSW2
 	movem.l (sp)+,d0-d5/a0-a1
