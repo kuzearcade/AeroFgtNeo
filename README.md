@@ -138,6 +138,11 @@ Slowdown is the share of frames where the game's logic misses a vblank, so the g
 
 The conversion is also ahead of the arcade at every load in the night fleet, the densest stage, including its most crowded moments. Sprite sets shown one frame late average 7.5 to 13% of frames. Dropped sprite frames are 0.03 to 0.08% of frames, mostly in the densest boss fights: a sprite set that runs out of columns beside the shown set is finished in that set's columns once its flip frees them, with its records split so that the draw order stays exact. Overruns past the vblank deadline number 1 to 5 per 600,000 frames in nations 0 to 2 and 24 in nation 3.
 
+### Known limitations
+
+- **Multi-slot MVS boards.** The conversion boots and runs from any slot, but it never hands control back to the BIOS, so a multi-slot board stays on Aero Fighters instead of moving to the next game after the attract. While it runs, it also uses the backup RAM where the BIOS keeps the other slots' save data (high scores and the like) from slot 2 up, so those games lose it. Use a single-slot board, or put the conversion in slot 1 and expect the other slots' saved data to be lost. Checked in MAME's MV-2F with Sonic Wings 3; see `work/catalog/AUDIT.md` section 57.
+- **Universe BIOS in-game menu.** It can't open over the conversion. Use the soft reboot (P1 START + A+B+C+D for two seconds, then release) and B+C+D at the splash for the soft dips.
+
 The detailed engineering record, with every experiment and its measurements, is `work/catalog/AUDIT.md`.
 
 ## Legal

@@ -1789,3 +1789,14 @@ Checked in MAME (work/play/fh/menudrv.lua): a 60-frame hold in a game: nothing; 
 
 **Files:** hal/hal.s (SOFT_RB, RB_FRAMES, hal_inputs), tools/aerofgt2neo.py (HAL_RBOOT, RELEASE_DEFS), work/play/fh/menudrv.lua (run once).
 
+## 57. Multi-slot MVS boards: the conversion holds the board and overwrites the other slots' save data (2026-10-21; not fixed, a README limitation)
+
+MAME's MV-2F (`ng_mv2f -bios euro -cart1 X -cart2 Y`) with a scratch copy of the `neogeo` software list plus an `aerofgtn` entry (fz74's files; `-hashpath`). Sonic Wings 3 + Sonic Wings 2: the attract of one, the BIOS switches slots, the other, back again. Sonic Wings 3 + the conversion: Sonic Wings 3's attract, the switch, the conversion boots from slot 2 and runs its attract correctly - and stays there (24,000 frames, several attract cycles). The conversion's picture is sideways there: the MV-2F driver has no rotation (a vertical game needs a vertical monitor on any cabinet).
+
+Why: an MVS game jumps back to the BIOS (SYSTEM_RETURN, $c00444) when its demo cycle under USER request 2 ends or after a game over, and the BIOS then moves to the next slot. The HAL's takeover is permanent. Returning would need:
+1. **The BIOS's work RAM, 0x10f300-0x10ffff.** The original's 64 KB of work RAM covers it and the takeover clears it. It can be kept: the Neo VRAM above the fix map (0x7500-0x7fff, 2,816 words, never displayed) is free. A VRAM write tap over 30,000 frames of the attract and a bot game shows no writes there after the takeover; the earlier ones are the BIOS's boot clears, and hal_video_init clears only 0x0000-0x74ff and SCB2-4.
+2. **The other slots' save blocks.** A backup-RAM dump after a Sonic Wings 3 -> Sonic Wings 2 switch: the BIOS keeps a slot's save data (header $10e pointer, $112 size: Sonic Wings 3 0xf2 bytes) at 0xd00320 + slot x 0x1000 (slot 1 0xd00320-0xd0041f, slot 2 0xd01320), and more non-zero BIOS data sits at 0xd08320 and 0xd09ba0. The HAL uses backup RAM from 0xd00420 up for the original's palette, raster, tilemap, sprite lookup and sprite RAM. Slot 1's block lies below that and survives; slot 2's and up, and the 0xd08xxx/0xd09xxx data, are overwritten as soon as the conversion runs, whether or not it ever returns. Keeping them would take up to 4 KB a slot; the free stores known are the 5.6 KB of VRAM and perhaps the second palette bank (8 KB).
+3. **The rest of the hand-back.** An attract-end hook in the original's code; the HAL's timer stopped and the BIOS's state and stack restored; the Z80 shim checked against the BIOS's slot-switch commands; and on a single-slot board a return each cycle would replay the original's boot memory check unless the return is limited to multi-slot boards.
+
+Not built. The README lists it as a limitation: use a single-slot board, or slot 1 and expect the other slots' saves to be lost.
+
