@@ -1687,8 +1687,31 @@ Boss fights: nation 2 drop frames 1.77% (fz70 ~4.4%), nation 3 2.08% (4.41%), lo
 
 **The MiSTer trial (p1 d2611bd9, 2026-10-21; fz70 restored after it, the build kept on the card as 538-p1.p1.ov2_d2611bd9):** chk11 clean (work/mister_ov2_chk11/sheet.png: the same 24 screens as fz70's, its one black frame a scene change both share); the 22-minute play_jp session captured (work/vid/ov2_play.mkv, sheet ov2_play_sheet.png), audio -31.6 dB mean. One-frame spikes 2.24% of frames (fz70's session 2.08%), the game's own flashes. A continuation's late heads would show as a one-frame change in the raster's top rows only (the picture's top band, the game being rotated): 182 such frames against fz70's 130, the left/right/bottom bands alike; looked at, they are the Japanese bomb's shockwave across the top, drawn on one frame in two to four in both builds (a sequence of 24 frames: the game's blink), the difference following how much bomb each open-loop session had. No continuation artefact seen. MAME cannot show one: every continuation ends (lines 255-330) before MAME's frame end (the session's ovsnap.lua found none pending in 12,000 attract frames).
 
-**Open:** a slipping continuation for the W-below-S drops (priority slips where they overlap, against a missing sprite) - a judgment call. Section 48's FZ_SHED results predate the fz_reset initialization of its state (FZ_SH_LV could start at the RAM test's $fc: shedding everything): its matrix (late 14-20%) needs a rerun before the verdict stands.
+**Open:** a slipping continuation for the W-below-S drops (priority slips where they overlap, against a missing sprite) - a judgment call. Section 48's FZ_SHED results predated the fz_reset initialization of its state: rerun in section 52.
 
 **Released as fz71 (2026-10-21):** the release switches + `FZ_OVF=2`; p1 md5 d2611bd9, CRC 7ad9189f, SHA1 39a7a92e...; the other cartridge files and the assist set are fz70's (work/out_fz71).
 
 **Files:** hal/spr.s (`.hdrop`'s overflow, `.rst`'s guard, the flip's hand-over, `spr_ovfend`, hal_spr_work's entry and `.fin`), hal/video.s (the commit's cut, FZ_OVF=1), hal/fz.s (fz_reset: FZ_OVF's and FZ_SHED's state cleared), hal/hal.s (FZ_OVF, FZ_OVFDIAG); probes work/play/fh/dropcls.lua; builds work/out_ov, out_ovd (FZ_OVF=1), out_ov2, out_ov2d (FZ_OVF=2), out_m0 (off: fz70); matrix work/matrix_ov2.txt; attract work/play/fp/att_ov2.
+
+## 52. Load shedding remeasured with its state initialized, on fz71 (2026-10-21; `FZ_SHED` stays off)
+
+**Why:** section 48 measured `FZ_SHED` before fz_reset cleared its state (the boot RAM test leaves patterns in the idle stack: FZ_SH_LV could begin at $fc, shedding everything). Build work/out_sh71: fz71's switches + `FZ_SHED=1` (p1 md5 cd3852f1).
+
+**The attract A/B (fz71 -> + shedding):** lost logic 392 -> 427, late 889 -> 985, sprites dropped 929 -> 528, frames shown incomplete (shed or dropped) 76 -> 343, overruns 1 -> 0. As section 48's (412 -> 452 lost logic): the initialization changed little here.
+
+**The matrix (work/matrix_sh71.txt against fz71's work/matrix_ov2.txt).** The matrix's drop frames count a frame with a shed effect too, so the true drops are counted apart (work/play/fp/truedrop.sh: frames where the drop counter rises, seeds 7-9):
+
+| nation | lost logic fz71 -> shed (arcade) | late | true drop frames | sprites dropped | frames incomplete (shed + dropped) |
+|---|---|---|---|---|---|
+| 0 | 1.20 -> 1.47% (3.31) | 7.23 -> 8.01% | 623 -> 311 | 4,358 -> 2,589 | 0.10 -> 1.44% |
+| 1 | 1.42 -> 1.70% (6.12) | 7.24 -> 8.28% | 421 -> 304 | 3,456 -> 2,252 | 0.06 -> 1.16% |
+| 2 | 3.01 -> 3.78% (8.81) | 11.19 -> 12.21% | 1,455 -> 322 | 12,084 -> 2,547 | 0.23 -> 1.59% |
+| 3 | 3.46 -> 4.19% (7.69) | 11.96 -> 13.16% | 2,753 -> 1,395 | 27,225 -> 10,171 | 0.43 -> 2.88% |
+
+Boss fights: lost logic 13.07% (nation 2) and 10.72% (nation 3) against the arcade's 23.34 / 15.31%; frames incomplete 8.6 / 11.7%. Overruns 1/2/1/21 (fz71 1/3/2/23).
+
+**Correction to section 48:** shedding does cut the true drops in every nation - by 28-78% here, and by a similar share in section 48's own matrix (true drop frames 283/322/402/1,528 against fz70's 974/618/3,297/4,610, counted the same way); section 48's "did not fall in every nation" came from one game of the first, ungated build.
+
+**Verdict: still off.** The price is effects missing on alternate frames in 1.2-2.9% of all frames and 4-12% of boss-fight frames - six to eleven times the frames of true drops it saves - plus 0.3-0.8 points of lost logic and ~1 point of late sets. Every nation stays well under the arcade's lost logic, so it remains a judgment call between an effect blinking for a few dozen frames and the back-most sprites of a set missing for one; with fz71's continuation already halving the true drops, the blink is the larger change on screen.
+
+**Files:** work/out_sh71, work/matrix_sh71.txt, work/play/fp/truedrop.sh, the attract run work/play/fp/att_sh71.
