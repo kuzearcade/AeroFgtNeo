@@ -227,6 +227,26 @@ FZD_FH          equ 1               ; the pointer's, unread)
 	endif
 FZ_PSN          equ FZ_V+248        ; b: (BP_SHOTS) the descriptor at hand is a poolable shot piece
 FZ_PBL          equ FZ_V+252        ; l: (BP_SIZED) the pool records' room at the pool's size
+; (FZ_HOLE, AUDIT 53; FUSED=1: the game-time pass's bytes) a split set's middle records,
+; kept for the shown set's columns after the flip: the pass where it left them, as a stop
+; leaves it (fz_hole_split)
+FZD_REC         equ FZ_V+184        ; l: FZ_REC then (past the record in work)
+FZD_A5          equ FZ_V+188        ; l: the piece (as .late leaves it: this one again)
+FZD_RTN         equ FZ_V+192        ; l: its routine
+FZD_Y           equ FZ_V+196        ; l: FZ_Y, FZ_X
+FZD_STOP        equ FZ_V+200        ; l: the first record of the lower run (where they end)
+FZD_W2          equ FZ_V+204        ; w: FZ_W2
+FZD_ZOOM        equ FZ_V+206        ; w: FZ_ZOOM
+FZD_LEFT        equ FZ_V+208        ; w: FZ_LEFT (this piece again)
+FZD_END         equ FZ_V+210        ; w: the set's end (its lower run's) while they go on
+FZD_GN          equ FZ_V+212        ; w: HAL_SPR_GNEXT then
+FZD_ON          equ FZ_V+214        ; b: 1 kept (the lower run in work), 2 going on (shown);
+                                    ; 3 a begun set's walk to do (fz_go), 4 a split's under way
+FZD_WACC        equ FZ_V+216        ; w: (fz_hwalk) the columns of the records looked at
+FZD_WROOM       equ FZ_V+218        ; w: the room below
+FZD_WP          equ FZ_V+232        ; l: the last record looked at (from the buffer's end back)
+FZD_WLO         equ FZ_V+236        ; l: the walk's end (the record before the first one)
+FZD_WPC         equ FZ_V+230        ; w: pieces still to look at
 FZ_TPLE         equ FZ_V+240        ; b: (FZ_TPLCHK) the record at hand came from a template
 FZ_TPLMISS      equ FZ_V+242        ; w: (FZ_TPLCHK) one-piece fast records without a template
 FZ_TPLBAD       equ FZ_V+244        ; w: (FZ_TPLCHK) templates unlike the general path's record
@@ -1365,6 +1385,9 @@ fz_begin:
 	ifeq FX_HUDON
 	sf      FX_HOK
 	endif
+	ifne FZ_HOLE
+	bra.w   fz_hole_begin           ; (FZ_HOLE: begun below the shown set, too large)
+	endif
 	rts
 
 ; hal_spr_work .fin: the pass complete (its pool records counted, its buffer free).
@@ -1540,6 +1563,21 @@ fz_go:
 	move.l  d0,-(sp)                ; the head slots' end
 	movea.l HAL_SPR_RA5,a5
 	movea.l FZ_RTN,a0
+	ifne FZ_HOLE
+	cmpi.b  #3,FZD_ON               ; (FZ_HOLE: a begun set's walk first - charged; no
+	bne.w   .hw                     ; time: stopped, on from there next time)
+	bsr.w   fz_hwalk
+	lea     G_SPRLUT,a2
+	movea.l HAL_SPR_WPTR,a6
+	tst.w   d0
+	bpl.s   .h1
+	jmp     spr_go_stop
+.h1:	beq.s   .hc
+	sf      FZD_ON                  ; (all fit, or too many pieces: as it was)
+	bra.w   .hw
+.hc:	bsr.w   fz_hole_bset
+.hw:
+	endif
 	tst.b   FZ_PH                   ; (a resume in the HUD pass)
 	bne.w   fz_hudp
 	; (falls into fz_next)
@@ -1600,6 +1638,15 @@ FZU_HHIT        equ 28+(3-2*FX_HOVCHG)*FX_HOV ; (FZ_PD) a HUD piece taken from t
 FZ_HUDRES       equ 5*48            ; the HUD pass keeps this back (hal/fx.s fx_walk:
                                     ; its HUD pass runs up to ~5 lines over its charge)
 fz_ntab:
+	ifne FZ_HOLE
+	cmpi.b  #2,FZD_ON               ; (FZ_HOLE: the middle records going on end where
+	bne.s   .hn                     ; the lower run's began)
+	move.l  FZ_REC,d0
+	cmp.l   FZD_STOP,d0
+	bne.s   .hn
+	jmp     spr_go_done
+.hn:
+	endif
 	movea.l FZ_REC,a1
 	ifne FZ_SHED
 	tst.b   (a1)                    ; (FZ_SHED) a sheddable record, shedding on: skipped
@@ -2418,6 +2465,282 @@ fz_split_anch:
 .y:	lea     G_SPRLUT,a2             ; (the pass's registers again)
 	move.w  HAL_SPR_W,d0
 	movea.l HAL_SPR_WPTR,a6
+	rts
+	endif
+
+	ifne FZ_HOLE
+; (FZ_HOLE, AUDIT 53) hal_spr_go .spl, in place of fz_split_anch: the set began at the top,
+; its top run reached the shown set S's start, and goes on below S's end.  With only S and
+; this set in the ring, the flip that shows this set frees S's columns between its runs:
+; the lower run takes the last records that fit it (fz_hwalk: counted back from the
+; buffer's end, unclipped - an upper bound), the records between are kept - the pass's
+; place saved as .late leaves it - and go on into S's columns after the flip (hal_spr_go
+; .fin, spr_holefin; FZ_OVF's continuation), in order: the draw order whole.  Else
+; fz_split_anch.  d0 = the set, d1 = HAL_SPR_BEGG (out: the lower run's start, its guard
+; height 0); a0, a5 the piece in work, a3 the VRAM data port, d7 the credit.  FZD_ON 4
+; out: no time for the walk (hal_spr_go .late: this piece again, the walk goes on from
+; where it stopped).  Clobbers d2-d6, a1; a2, a6 as fz_split_anch leaves them.
+HLN             equ 240                 ; pieces looked at, at most
+fz_hole_split:
+	cmpi.b  #4,FZD_ON
+	beq.s   .w
+	tst.b   FZD_ON
+	bne.w   .no
+	tst.w   FZ_OVFP                 ; (and FZ_OVFC)
+	bne.w   .no
+	cmpi.b  #2,HAL_SPR_ORDN
+	bne.w   .no
+	cmp.b   HAL_SPR_ORD+1,d0
+	bne.w   .no
+	moveq   #0,d2
+	move.b  HAL_SPR_ORD,d2
+	lea     HAL_SPR_ST,a1
+	cmpi.b  #3,(a1,d2.w)            ; (S shown)
+	bne.w   .no
+	move.l  FZ_RECE,FZD_WP          ; the walk: from the last record back to the one in
+	movea.l FZ_REC,a1               ; work (fz_ntab moved on), counted too
+	lea     -2*FZ_RSZ(a1),a1
+	move.l  a1,FZD_WLO
+	clr.w   FZD_WACC
+	move.w  d1,d2
+	subi.w  #SPR_PB+4,d2            ; the room below S, the guard's 4 kept
+	move.w  d2,FZD_WROOM
+	move.w  #HLN,FZD_WPC
+	move.b  #4,FZD_ON
+.w:	movem.l d0-d1/a0/a4,-(sp)
+	bsr.w   fz_hwalk
+	lea     G_SPRLUT,a2             ; (the pass's registers again)
+	movea.l HAL_SPR_WPTR,a6
+	tst.w   d0
+	beq.s   .cut
+	bmi.s   .stop
+	movem.l (sp)+,d0-d1/a0/a4       ; all fit, or too many pieces: a plain split
+	sf      FZD_ON
+.no:	jmp     fz_split_anch
+.stop:	movem.l (sp)+,d0-d1/a0/a4       ; (FZD_ON 4: the walk on next time)
+	rts
+.cut:	movem.l (sp)+,d0-d1/a0/a4
+	move.l  FZ_REC,FZD_REC          ; the pass's place: this piece again
+	lea     -14(a5),a1
+	move.l  a1,FZD_A5
+	move.w  FZ_LEFT,d3
+	addq.w  #1,d3
+	move.w  d3,FZD_LEFT
+	move.l  a0,FZD_RTN
+	move.l  FZ_Y,FZD_Y
+	move.w  FZ_W2,FZD_W2
+	move.w  FZ_ZOOM,FZD_ZOOM
+	move.b  #1,FZD_ON
+	move.l  FZD_STOP,FZ_REC         ; the pass on at the lower run's first record (.spl:
+	move.w  #-2,FZ_LEFT             ; this piece again: fz_next goes to fz_ntab)
+	ifne FZ_OVFDIAG
+	addq.l  #1,FZ_HLN
+	endif
+	move.w  FZD_WACC,d2
+	addi.w  #SPR_PB+4,d2            ; the lower run ends at SPR_PB
+	cmp.w   d1,d2
+	bhs.s   .y
+	move.w  d2,d1
+	addi.w  #SCB3,d2                ; (its guard height 0)
+	move.w  d2,-2(a3)
+	move.w  #0,(a3)
+.y:	rts
+
+; (FZ_HOLE) the walk back from FZD_WP (exclusive) to FZD_WLO (exclusive), each record's
+; columns (unclipped) onto FZD_WACC while they fit FZD_WROOM, each charged before it is
+; looked at (~90 cycles a piece, ~100 a record).  d0 out: 0 the room full - FZD_STOP the
+; first record that fits (after the one that does not); 1 all fit; 2 more than FZD_WPC
+; pieces; -1 no time (FZD_WP where to go on).  d7 the credit.  Clobbers d0-d6, a1, a2, a6.
+fz_hwalk:
+	movea.l FZD_WP,a1
+.r:	lea     -FZ_RSZ(a1),a1
+	cmpa.l  FZD_WLO,a1
+	bls.s   .all
+	moveq   #1,d3                   ; its pieces
+	ifne FZ_FAST
+	ifne FZ_FINAL
+	cmpi.b  #$fe,13(a1)
+	bhs.s   .u
+	else
+	cmpi.b  #$ff,13(a1)
+	beq.s   .u
+	endif
+	endif
+	moveq   #0,d3
+	move.b  15(a1),d3
+	addq.w  #1,d3
+.u:	move.w  d3,d0                   ; 6 units a piece + 7
+	add.w   d0,d0
+	add.w   d3,d0
+	add.w   d0,d0
+	addq.w  #7,d0
+	swap    d7
+	sub.w   d0,d7
+	bpl.s   .ok
+	jsr     hal_spr_refill
+	bpl.s   .ok
+	swap    d7
+	moveq   #-1,d0
+	rts
+.ok:	swap    d7
+	move.w  FZD_WPC,d4
+	bsr.w   fz_hcols
+	move.w  d4,FZD_WPC
+	bmi.s   .gv
+	move.w  FZD_WACC,d0
+	add.w   d5,d0
+	cmp.w   FZD_WROOM,d0
+	bhi.s   .cut
+	move.w  d0,FZD_WACC
+	move.l  a1,FZD_WP
+	bra.s   .r
+.cut:	lea     FZ_RSZ(a1),a1
+	move.l  a1,FZD_STOP
+	moveq   #0,d0
+	rts
+.all:	moveq   #1,d0
+	rts
+.gv:	moveq   #2,d0
+	rts
+
+; the record a1's columns (unclipped) in d5; d4 the pieces left to look at (N set:
+; none).  Clobbers d0-d1, a2, a6.
+fz_hcols:
+	moveq   #0,d5
+	ifne FZ_FAST
+	ifne FZ_FINAL
+	cmpi.b  #$fe,13(a1)             ; (a fast record, $ff or $fe: w1's high byte at +15)
+	blo.s   .cg
+	else
+	cmpi.b  #$ff,13(a1)
+	bne.s   .cg
+	endif
+	subq.w  #1,d4
+	bmi.s   .cx
+	moveq   #$e,d5
+	and.b   15(a1),d5
+	lsr.w   #1,d5
+	addq.w  #1,d5
+	rts
+.cg:
+	endif
+	movea.l (a1),a2
+	moveq   #0,d1
+	move.b  15(a1),d1
+.ct:	subq.w  #1,d4
+	bmi.s   .cx
+	ifne FZ_PD
+	btst    #FZD_FD,(a2)
+	beq.s   .cr
+	moveq   #$e,d0
+	and.b   11(a2),d0
+	bra.s   .cz
+.cr:
+	endif
+	movea.l (a2),a6
+	moveq   #$e,d0
+	and.b   1(a6),d0
+.cz:	lsr.w   #1,d0
+	addq.w  #1,d0
+	add.w   d0,d5
+	lea     14(a2),a2
+	dbra    d1,.ct
+	tst.w   d4                      ; (N clear)
+.cx:	rts
+
+
+; (FZ_HOLE, AUDIT 53) fz_begin's end: the set began just below the shown set S's end (the
+; ring S and it, nothing split), S at the ring's top: the bottom set of two large ones - it
+; would drop its back records at SPR_PB if its records need more columns than lie below,
+; and the columns S's flip frees lie above it.  The walk (fz_hwalk) is planned here, done
+; at the pass's start (fz_go: charged as the pass; fz_hole_bset).  Keeps all.
+fz_hole_begin:
+	movem.l d0-d3/a0-a1,-(sp)
+	sf      FZD_ON                  ; (nothing kept now)
+	tst.w   FZ_OVFP                 ; (and FZ_OVFC)
+	bne.w   .x
+	tst.b   HAL_SPR_SPS
+	bpl.w   .x
+	cmpi.b  #2,HAL_SPR_ORDN
+	bne.w   .x
+	move.w  HAL_SPR_W,d1
+	cmp.b   HAL_SPR_ORD+1,d1
+	bne.w   .x
+	moveq   #0,d2
+	move.b  HAL_SPR_ORD,d2          ; S
+	lea     HAL_SPR_ST,a1
+	cmpi.b  #3,(a1,d2.w)
+	bne.w   .x
+	lea     HAL_SPR_START,a0
+	add.w   d2,d2
+	move.w  (a0,d2.w),d3            ; S at the ring's top (else .rst begins this set
+	cmp.w   RING_TOP,d3             ; again above S)
+	bne.w   .x
+	add.w   d1,d1
+	move.w  (a0,d1.w),d3            ; begun at the tail (S's end)?
+	cmp.w   HAL_SPR_BEGG,d3
+	bne.w   .x
+	subi.w  #SPR_PB+4,d3            ; the room below, the guard's 4 kept
+	move.w  d3,FZD_WROOM
+	clr.w   FZD_WACC
+	move.l  FZ_RECE,FZD_WP
+	movea.l FZ_RECS,a1
+	lea     -FZ_RSZ(a1),a1
+	move.l  a1,FZD_WLO
+	move.w  #HLN,FZD_WPC
+	move.b  #3,FZD_ON
+.x:	movem.l (sp)+,d0-d3/a0-a1
+	rts
+
+; (FZ_HOLE) fz_go, the walk planned at the begin done with the room full: the set begun
+; again as a split set with no top run - its start S's, its lower run from SPR_PB up to
+; its guard (height 0) with the last records, the first ones kept (from the buffer's
+; first record) for S's columns after the flip.  The pass's registers (a3 the VRAM data
+; port, a6 the set).  Clobbers d0-d2, a1.
+fz_hole_bset:
+	move.l  FZD_STOP,FZ_REC         ; the pass at the lower run's first record
+	move.l  FZ_RECS,FZD_REC         ; kept: from the first record
+	move.w  #-1,FZD_LEFT            ; (fz_next straight to fz_ntab)
+	clr.l   FZD_A5
+	clr.l   FZD_RTN
+	move.b  #1,FZD_ON
+	ifne FZ_OVFDIAG
+	addq.l  #1,FZ_HLN
+	endif
+	move.w  FZD_WACC,d2             ; the lower run's guard: height 0
+	addi.w  #SPR_PB+4,d2
+	move.w  d2,d1
+	addi.w  #SCB3,d1
+	move.w  d1,-2(a3)
+	move.w  #0,(a3)
+	move.w  HAL_SPR_W,d0
+	move.b  d0,HAL_SPR_SPS          ; split, its top run empty: S's start its start
+	add.w   d0,d0
+	moveq   #0,d1
+	move.b  HAL_SPR_ORD,d1
+	add.w   d1,d1
+	lea     HAL_SPR_START,a1
+	move.w  (a1,d1.w),d1
+	move.w  d1,(a1,d0.w)
+	move.w  d1,HAL_SPR_SPJ
+	move.w  d2,HAL_SPR_SPG
+	move.w  d2,SS_HNEXT(a6)
+	jmp     hal_spr_lim
+	endif
+	if FZ_OVFPB|FZ_HOLE
+; d0 = a set: its pool records so far (FZ_PBP) in FZ_PBN, as fz_fin counts them - for a
+; flip before its pass is done (FZ_OVF; fz_begin cleared the count: the flip showed the
+; set with no pool bullets).  Keeps all.
+fz_pbcnt:
+	movem.l d0-d1/a0,-(sp)
+	add.w   d0,d0
+	move.l  FZ_PBP,d1
+	sub.l   FZ_PBE,d1
+	addi.l  #8*BP_N,d1
+	lsr.w   #3,d1
+	lea     FZ_PBN,a0
+	move.w  d1,(a0,d0.w)
+	movem.l (sp)+,d0-d1/a0
 	rts
 	endif
 

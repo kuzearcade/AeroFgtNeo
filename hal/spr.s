@@ -349,6 +349,9 @@ ring_spr_work:
 	ifne SPR_ANCH
 	addq.w  #ANCH_LINES,d0          ; (spr_begin_anch's / fz_anch's sum)
 	endif
+	ifne FZ_HOLE
+	addq.w  #ANCH_LINES,d0          ; (hal/fz.s fz_hole_begin's: the same at most)
+	endif
 	endif
 	tst.w   HAL_SPR_TAILU           ; in the commit: the work after a stop too (the
 	beq.s   .bt                     ; refills keep it back the same way)
@@ -405,6 +408,14 @@ ring_spr_work:
 	bra.w   .ok
 .fin:
 	OVS     3
+	ifne FZ_HOLE
+	cmpi.b  #1,FZD_ON               ; (FZ_HOLE: the lower run done, the middle records
+	beq.w   spr_holefin             ; kept: complete for the flip, then on; a walk
+	cmpi.b  #3,FZD_ON               ; under way not needed after all)
+	blo.s   .fh
+	sf      FZD_ON
+.fh:
+	endif
 	ifne FZ_OVF
 	tst.b   FZ_OVFC                 ; (FZ_OVF: the continuation complete: its heads
 	beq.s   .fo                     ; written, the set stays shown)
@@ -464,6 +475,7 @@ FZ_OVFH         equ $10fd9a         ; w: its SS_HOFF at the flip (the heads it w
 FZ_OVFN         equ $d00f30         ; l: (OVR_DIAG's RAM: not together) overflows begun
 FZ_OVFOK        equ $d00f34         ; l: completed in the vblank
 FZ_OVFX         equ $d00f38         ; l: cut at the deadline (the rest dropped)
+FZ_HLN          equ $d00f3c         ; l: (FZ_HOLE) middle records kept (FZ_MGC's: not together)
 	endif
 ; The continuation over (d1 = 0 complete, 1 not): the heads since the flip written (their
 ; SCB3: shown now - in the vblank), the rest of the records dropped (not complete), the set
@@ -507,13 +519,64 @@ spr_ovfend:
 	add.w   d1,d1
 	lea     HAL_SPR_START,a0
 	move.w  (a0,d1.w),d2
+	ifne FZ_HOLE
+	tst.b   FZD_ON                  ; (FZ_HOLE: the middle records done in S's columns:
+	beq.s   .h0                     ; the top run ends there now; the set's end and the
+	move.w  SS_HNEXT(a6),HAL_SPR_SPJ        ; next start are the lower run's again)
+	lea     HAL_SPR_END,a0
+	move.w  FZD_END,(a0,d1.w)
+	move.w  FZD_GN,HAL_SPR_GNEXT
+	sf      FZD_ON
+	sub.w   FZD_END,d2              ; (its size: both runs)
+	sub.w   HAL_SPR_SPJ,d2
+	add.w   HAL_SPR_SPG,d2
+	bra.s   .h1
+.h0:
+	endif
 	sub.w   SS_HNEXT(a6),d2
-	move.w  d2,HAL_SPR_PREV
+.h1:	move.w  d2,HAL_SPR_PREV
 	jsr     fz_fin
+	if FZ_OVFPB|FZ_HOLE
+	move.w  FZ_OVFW,d0              ; (fz_fin: d0 x 2)
+	jsr     bp_apply                ; (hal/fx.s: its pool bullets, all of them now)
+	endif
 	move.w  #-1,HAL_SPR_W
 	clr.l   HAL_SPR_RA5
 	sf      HAL_SPR_BLK
 	movem.l (sp)+,d0-d3/a0-a1/a3-a4/a6
+	rts
+	endif
+
+	ifne FZ_HOLE
+; (FZ_HOLE, AUDIT 53) hal_spr_go .fin with the middle records kept (hal/fz.s
+; fz_hole_split): the set complete for its flip, still converting (as FZ_OVF's .hdrop),
+; its pool bullets so far counted; the pass set back to the kept records, the set's next
+; column the top run's end (S's columns below it, free after the flip and S's reclaim:
+; hal_spr_lim stops at the lower run's guard).  The lower run's end and the next start
+; are kept for spr_ovfend.  a6 = the set's state.  Clobbers d0-d1, a0.
+spr_holefin:
+	move.w  HAL_SPR_W,d0
+	lea     HAL_SPR_ST,a0
+	move.b  #1,(a0,d0.w)
+	move.w  d0,FZ_OVFW
+	st      FZ_OVFP
+	st      HAL_SPR_BLK
+	jsr     fz_pbcnt
+	move.w  d0,d1
+	add.w   d1,d1
+	lea     HAL_SPR_END,a0
+	move.w  (a0,d1.w),FZD_END
+	move.w  HAL_SPR_GNEXT,FZD_GN
+	move.w  HAL_SPR_SPJ,SS_HNEXT(a6)
+	move.l  FZD_A5,HAL_SPR_RA5
+	move.l  FZD_REC,FZ_REC
+	move.w  FZD_LEFT,FZ_LEFT
+	move.l  FZD_RTN,FZ_RTN
+	move.l  FZD_Y,FZ_Y
+	move.w  FZD_W2,FZ_W2
+	move.w  FZD_ZOOM,FZ_ZOOM
+	sf      FZ_PH
+	move.b  #2,FZD_ON
 	rts
 	endif
 
@@ -1753,7 +1816,13 @@ COLS	macro                           ; \1: column step x2 (addq / subq)
 	bsr.w   spr_split_anch          ; (d1: where the lower run starts)
 	endif
 	if (FUSED=1)&FZ_SPLANCH
+	ifne FZ_HOLE
+	jsr     fz_hole_split           ; (hal/fz.s: the middle records kept for the shown
+	cmpi.b  #4,FZD_ON               ; set's columns, or as fz_split_anch; no time for
+	beq.w   .late                   ; its walk: this piece again)
+	else
 	jsr     fz_split_anch           ; (hal/fz.s: the same from the records left)
+	endif
 	endif
 	endif
 	move.b  d0,HAL_SPR_SPS
@@ -1811,6 +1880,9 @@ COLS	macro                           ; \1: column step x2 (addq / subq)
 	lea     HAL_SPR_ST,a1
 	move.b  #1,(a1,d0.w)            ; complete for the flip, still converting
 	move.w  d0,FZ_OVFW
+	ifne FZ_OVFPB
+	jsr     fz_pbcnt                ; (hal/fz.s: its pool bullets so far)
+	endif
 	st      FZ_OVFP
 	ifne FZ_OVFDIAG
 	addq.l  #1,FZ_OVFN
@@ -2285,6 +2357,9 @@ ring_spr_flip:
 	addi.l  #767,d0
 	divu    #768,d0
 	add.w   (sp),d0
+	ifne FZ_FLIPM
+	addq.w  #FZ_FLIPM,d0            ; (FZ_FLIPM: lines more for the flip, AUDIT 53)
+	endif
 	sf      FX_FNOH
 	bsr     hal_late_n
 	beq.s   .fit
@@ -2292,6 +2367,9 @@ ring_spr_flip:
 	blo.s   .nft
 	st      FX_FNOH
 	move.w  (sp),d0
+	ifne FZ_FLIPM
+	addq.w  #FZ_FLIPM,d0
+	endif
 	bsr     hal_late_n
 	beq.s   .fit
 .nft:	addq.l  #2,sp

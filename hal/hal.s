@@ -124,6 +124,18 @@ FZ_OVF          equ 0               ; (hal/spr.s: a set out of columns beside th
 	ifnd FZ_OVFDIAG
 FZ_OVFDIAG      equ 0               ; (FZ_OVF: count them, OVR_DIAG's RAM)
 	endif
+	ifnd FZ_OVFPB
+FZ_OVFPB        equ 0               ; (FZ_OVF: the pool bullets of a set flipped before its pass is
+	endif                           ; done - counted so far, again at its end; AUDIT 53)
+	ifnd FZ_FLIPM
+FZ_FLIPM        equ 0               ; (hal/spr.s: lines added to the flip's time estimate, AUDIT 53)
+	endif
+	ifnd FZ_HOLE
+FZ_HOLE         equ 0               ; (FZ_OVF=2: a set split around the shown one keeps that set's
+	endif                           ; columns for its middle records after the flip, AUDIT 53)
+	if FZ_HOLE&((FZ_OVF-2)|(FUSED-1))
+	fail "FZ_HOLE needs FZ_OVF=2 and FUSED=1"
+	endif
 	ifnd FZ_SHED
 FZ_SHED         equ 0               ; (hal/fz.s: load shedding of the effects after a dropping pass, AUDIT 48)
 	endif
