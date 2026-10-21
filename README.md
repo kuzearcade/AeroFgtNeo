@@ -55,13 +55,13 @@ It takes about half a minute. `--mame` names your MAME executable if it is not o
 
 Then build the cartridge set.
 
-Run the converter from the project root. The release build uses the direct video path with the switches below:
+Run the converter from the project root:
 
 ```sh
-AEROFGT_DIRECT=1 \
-AEROFGT_DEFS="FUSED=1,GX_XPRE=1,FZ_PD=1,GX_SCAN=1,FZ_TPL=1,FX_HOV=1,BG_HIDECLR=1,BG_SETSCR=1,UB_LOGO=1,BG_CUTCAP=1,BG_SCRRING=1,SPR_FLIPRES=1,FX_HOVCHG=1,GX_BAND=1,GX_CULLK=1,FZ_FASTR=1,FZ_EARLYB=1,FZ_OVF=2,FZ_OVFPB=1,FZ_HOLE=1,FZ_FLIPM=1" \
 python3 -I tools/aerofgt2neo.py --aerofgt mame_roms/aerofgt.zip --secref mame_roms/sonicwi3.zip --out out
 ```
+
+This builds the release. Its settings are the defaults: the direct video path (`AEROFGT_DIRECT=1`) and the release's switches (`AEROFGT_DEFS`, listed as `RELEASE_DEFS` at the top of `tools/aerofgt2neo.py`). Setting either variable in the environment overrides its default, and an `AEROFGT_DEFS` you set replaces the whole list.
 
 The build takes a few seconds. It writes:
 
@@ -72,13 +72,13 @@ The build takes a few seconds. It writes:
 | `out/aerofgtn_driver.txt` | The MAME `ROM_START` block with CRCs and SHA1s |
 | `out/build/` | Build logs, the HAL listing `hal.lst`, intermediate binaries |
 
-Without `AEROFGT_DIRECT` and `AEROFGT_DEFS` the tool makes the plain build. It is kept byte-identical between changes as a regression check.
+`AEROFGT_DIRECT=0 AEROFGT_DEFS=` makes the plain build. It is kept byte-identical between changes as a regression check.
 
 New work is added behind `AEROFGT_DEFS` switches. A build with a new switch turned off must be byte-identical to the previous release.
 
 ### Expected checksums
 
-The release command above, with the emblem image made by `tools/make_vslogo.py`, produces exactly these files. If yours differ, check that your `aerofgt.zip` is the MAME dump the converter expects; it stops with an error if a file's CRC is wrong. The Neo Geo set given with `--secref` does not change them: `sonicwi3.zip` and `sonicwi2.zip` give the same files.
+The build command above, with the emblem image made by `tools/make_vslogo.py`, produces exactly these files. If yours differ, check that your `aerofgt.zip` is the MAME dump the converter expects; it stops with an error if a file's CRC is wrong. The Neo Geo set given with `--secref` does not change them: `sonicwi3.zip` and `sonicwi2.zip` give the same files.
 
 The cartridge set, `out/aerofgtn/` (release fz72):
 
@@ -120,16 +120,16 @@ mame aerofgtn -rompath "out;mame_roms"
 The test tools live in `tests/` and `work/play/`. The main ones:
 
 - **RAM equivalence.** `tests/harness.lua` plays an input movie and dumps RAM each frame, on the arcade and on the conversion. `tests/compare_state.py` compares the two.
-- **Lag and lost frames.** `work/play/fp/runlag.sh` measures lost logic frames, late sprite sets, sprite drops and overruns on a movie.
+- **Slowdown and lag.** `work/play/fp/runlag.sh` measures slowdown (frames where the game's logic misses a vblank), late sprite sets, sprite drops and overruns on a movie.
 - **The profile matrix.** `work/play/fp/matrix.sh` runs two-player games with autofire and boss bombs for every nation and three seeds, on the conversion and the arcade, and reports by stage and boss fight.
 
 ## Current status
 
 The current release is **fz72** (2026-10-21). It runs on the MiSTer and in MAME, has been played through on both, and has no known reboots or display faults.
 
-Lost logic frames are frames where the game's logic misses a vblank. The original arcade loses some too. In the profile matrix, the conversion loses fewer than the arcade in every nation:
+Slowdown is the share of frames where the game's logic misses a vblank, so the game runs slower for that frame. The original arcade slows down too. In the profile matrix, the conversion slows down less than the arcade in every nation:
 
-| Nation | Conversion | Arcade |
+| Nation | Conversion slowdown | Arcade slowdown |
 |---|---|---|
 | 0 | 1.25% | 3.31% |
 | 1 | 1.61% | 6.12% |
@@ -139,11 +139,6 @@ Lost logic frames are frames where the game's logic misses a vblank. The origina
 The conversion is also ahead of the arcade at every load in the night fleet, the densest stage, including its most crowded moments. Sprite sets shown one frame late average 7.5 to 13% of frames. Dropped sprite frames are 0.03 to 0.08% of frames, mostly in the densest boss fights: a sprite set that runs out of columns beside the shown set is finished in that set's columns once its flip frees them, with its records split so that the draw order stays exact. Overruns past the vblank deadline number 1 to 5 per 600,000 frames in nations 0 to 2 and 24 in nation 3.
 
 The detailed engineering record, with every experiment and its measurements, is `work/catalog/AUDIT.md`.
-
-## To do
-
-- **Sprite drops in boss fights.** The drops come from a capacity limit of the Neo Geo sprite column ring: in bomb-heavy boss fights the shown sprite set and the next one are each over half the ring. Since fz71 a set that runs out of columns is finished in the shown set's columns after its flip (section 51 of the audit), and since fz72 a set placed below or around the shown set keeps those columns for the records that belong there in draw order (section 53): together they cut the drop frames by about 80%. The rest are sets that begin mid-ring and run out even with the freed columns, and sets larger than the ring. Column sharing, matching, in-place updates, column merging and load shedding have all been built and measured (section 48); none was a net gain (shedding effects removes more true drops, but makes effects blink in six times as many frames: section 52). What is left would change the capacity itself: a single-buffered store for some class of sprites, or lending the tilemaps' sprite columns.
-- **The bullet pool.** Three versions of a separate pool for bullets and player shots were built and measured (sections 40, 42 and 44 of the audit). None beat the release. Pooling explosions and other effects in a single-buffered store was analysed too (section 49): they barely change from frame to frame, but they sit in the middle of the draw order, so a store would draw most explosions over or under the wrong sprites, and it helps only nation 2. Two tuning knobs for the shots remain untried, but neither is expected to help.
 
 ## Legal
 

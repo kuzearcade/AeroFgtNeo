@@ -133,8 +133,10 @@ FZ_FLIPM        equ 0               ; (hal/spr.s: lines added to the flip's time
 	ifnd FZ_HOLE
 FZ_HOLE         equ 0               ; (FZ_OVF=2: a set split around the shown one keeps that set's
 	endif                           ; columns for its middle records after the flip, AUDIT 53)
-	if FZ_HOLE&((FZ_OVF-2)|(FUSED-1))
+	ifne FZ_HOLE                    ; (FUSED is defined when it is on: the plain build has
+	if (FZ_OVF-2)|(FUSED-1)         ; neither)
 	fail "FZ_HOLE needs FZ_OVF=2 and FUSED=1"
+	endif
 	endif
 	ifnd FZ_SHED
 FZ_SHED         equ 0               ; (hal/fz.s: load shedding of the effects after a dropping pass, AUDIT 48)

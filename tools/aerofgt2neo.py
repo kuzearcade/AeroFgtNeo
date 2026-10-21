@@ -4,6 +4,9 @@
   python3 -I tools/aerofgt2neo.py --aerofgt mame_roms/aerofgt.zip \
           --secref mame_roms/sonicwi3.zip --out out
 
+builds the release (RELEASE_DIRECT, RELEASE_DEFS below) unless AEROFGT_DIRECT / AEROFGT_DEFS
+are set in the environment.
+
 Writes out/aerofgtn/*.p1/.s1/.m1/.v1/.c1/.c2 (a MAME-loadable directory set),
 out/aerofgtn.zip and out/aerofgtn_driver.txt (ROM_START block with CRC/SHA1).
 """
@@ -22,6 +25,16 @@ import zlib
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
+
+# The release build's video path and switches, used unless the environment defines its own:
+# AEROFGT_DIRECT=0 with AEROFGT_DEFS= (empty) gives the plain build; any AEROFGT_DEFS, even an
+# empty one, replaces the whole list.  Set before anything below reads them.
+RELEASE_DIRECT = "1"
+RELEASE_DEFS = ("FUSED=1,GX_XPRE=1,FZ_PD=1,GX_SCAN=1,FZ_TPL=1,FX_HOV=1,BG_HIDECLR=1,BG_SETSCR=1,"
+                "UB_LOGO=1,BG_CUTCAP=1,BG_SCRRING=1,SPR_FLIPRES=1,FX_HOVCHG=1,GX_BAND=1,GX_CULLK=1,"
+                "FZ_FASTR=1,FZ_EARLYB=1,FZ_OVF=2,FZ_OVFPB=1,FZ_HOLE=1,FZ_FLIPM=1")
+os.environ.setdefault("AEROFGT_DIRECT", RELEASE_DIRECT)
+os.environ.setdefault("AEROFGT_DEFS", RELEASE_DEFS)
 
 import analyze68k  # noqa: E402
 import memmap      # noqa: E402
