@@ -48,6 +48,10 @@ HAL_WHOLD       equ $d00f98         ; l: those holds
 DL_GATE         equ 0               ; (hal/dl.s: > 0: an update in place is tried only with this many
 	endif                           ; lines + 3 a piece to spare before the real vblank)
 DL_GATEN        equ $d00f9c         ; l: tries the gate skipped
+	ifnd SOFT_RB
+SOFT_RB         equ 0               ; (2026-10-21, hal_inputs: P1 START + A+B+C+D held RB_FRAMES, then
+	endif                           ; released, reboots the system through the BIOS, AUDIT 56)
+RB_FRAMES       equ 120             ; (SOFT_RB: 2 seconds)
 	ifnd BG_FIXCLR
 BG_FIXCLR       equ 0               ; (2026-10-21, hal/tm.s: BG_HIDECLR's layer-1 clear also clears its text
 	endif                           ; on the fix layer, AUDIT 55)
@@ -1388,6 +1392,30 @@ hal_dips:
 ; P1/P2/SYSTEM; clobbers d0
 hal_inputs:
 	move.b  REG_P1CNT,d0
+	ifne SOFT_RB
+	; (SOFT_RB) P1 START + A+B+C+D held RB_FRAMES real frames, then all of them
+	; released: the Universe BIOS's "soft reboot" for a game that never calls the
+	; BIOS - interrupts masked and no more watchdog kicks, so the watchdog resets the
+	; system and the BIOS boots again (its splash: the boot button codes work, e.g.
+	; B+C+D for the soft DIPs).  Not while held: the BIOS would take them for a code.
+	cmpi.w  #RB_FRAMES,HAL_RBOOT
+	bhs.s   .ra
+	cmpi.b  #$0f,d0
+	bhi.s   .rn                     ; (A-D: bits 4-7, active low; any direction allowed)
+	btst    #0,REG_STATUS_B
+	bne.s   .rn
+	addq.w  #1,HAL_RBOOT
+	bra.s   .rk
+.ra:	andi.b  #$f0,d0                 ; armed: wait until START and A-D are released
+	cmpi.b  #$f0,d0
+	bne.s   .rk
+	btst    #0,REG_STATUS_B
+	beq.s   .rk
+	move.w  #$2700,sr
+.rw:	bra.s   .rw
+.rn:	clr.w   HAL_RBOOT
+.rk:	move.b  REG_P1CNT,d0
+	endif
 	ori.b   #$c0,d0
 	move.b  d0,IO_MIRROR+$21
 	move.b  REG_P2CNT,d0

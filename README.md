@@ -20,7 +20,7 @@ The project holds itself to these rules:
 - **Video conversion on the Neo Geo.** The arcade's two scrolling tilemaps, its sprites and its palette are converted in real time into Neo Geo sprite columns, the fix layer and Neo Geo palettes.
 - **Graphics converted at build time.** The arcade's tile and sprite graphics become the Neo Geo C, S and V ROMs. Common sprite shapes are precomputed into ROM templates.
 - **Timing model detected at boot.** One ROM runs on both MAME and the MiSTer core. It measures the machine's interrupt timing when it starts.
-- **Neo Geo integration.** The set has its own NGH number (0x0538, unused by any released title). Universe BIOS soft dips work, including the arcade's free play (FREE PLAY ON, the last option), and the Universe BIOS splash shows the Video System emblem.
+- **Neo Geo integration.** The set has its own NGH number (0x0538, unused by any released title). Universe BIOS soft dips work, including the arcade's free play (FREE PLAY ON, the last option), and the Universe BIOS splash shows the Video System emblem. Holding P1 START + A+B+C+D for two seconds, then releasing, reboots the system (the Universe BIOS in-game menu can't open over the conversion); hold B+C+D during the splash that follows for test mode and the soft dips.
 - **A MAME-only "assist" set (`aerofgtna`).** It adds an emulated board that performs the video conversion. That makes it pixel exact against the arcade at a constant two-frame offset. It is a reference for testing and cannot exist as a real cartridge.
 
 ## Requirements
@@ -80,11 +80,11 @@ New work is added behind `AEROFGT_DEFS` switches. A build with a new switch turn
 
 The build command above, with the emblem image made by `tools/make_vslogo.py`, produces exactly these files. If yours differ, check that your `aerofgt.zip` is the MAME dump the converter expects; it stops with an error if a file's CRC is wrong. The Neo Geo set given with `--secref` does not change them: `sonicwi3.zip` and `sonicwi2.zip` give the same files.
 
-The cartridge set, `out/aerofgtn/` (release fz73):
+The cartridge set, `out/aerofgtn/` (release fz74):
 
 | File | Size | CRC32 | SHA1 |
 |---|---|---|---|
-| `538-p1.p1` | 1,048,576 | `c934e3d9` | `192439a226ce5af83182ed31f5f40ebe9bc1a299` |
+| `538-p1.p1` | 1,048,576 | `08c5d4e8` | `091b7cbd04a117bf7d53871bf31888858e94fe1a` |
 | `538-s1.s1` | 131,072 | `0d03fe97` | `66c4bd3fd4f96b6e091a3dd940f2b3dbd9532a57` |
 | `538-m1.m1` | 131,072 | `099dcce7` | `72afbb063e1be6a013c5d0921b76763f1383879e` |
 | `538-v1.v1` | 2,097,152 | `b72e6abe` | `a7276d1cb693286fe87f945c9254e2f62bf28acb` |
@@ -95,7 +95,7 @@ The MAME-only assist set, `out/aerofgtna/`, made by the same command:
 
 | File | Size | CRC32 | SHA1 |
 |---|---|---|---|
-| `538a-p1.p1` | 1,048,576 | `581755c2` | `0d0a7bbfb34e9ba81971a8d7c15a2bb00145400b` |
+| `538a-p1.p1` | 1,048,576 | `e729255e` | `ff612ccfc2d9d2578f062d7975bea9c558fa1b76` |
 | `538a-t1.bin` | 1,048,576 | `5bcd6831` | `1479c87dc3454203e1df16dc59f5180434e98fcb` |
 | `538a-t2.bin` | 4,194,304 | `2f66876b` | `db7c4ecc7b562f4d27df08400c46aa9c1cc38b95` |
 
@@ -125,7 +125,7 @@ The test tools live in `tests/` and `work/play/`. The main ones:
 
 ## Current status
 
-The current release is **fz73** (2026-10-21). It runs on the MiSTer and in MAME, has been played through on both, and has no known reboots or display faults.
+The current release is **fz74** (2026-10-21). It runs on the MiSTer and in MAME, has been played through on both, and has no known reboots or display faults.
 
 Slowdown is the share of frames where the game's logic misses a vblank, so the game runs slower for that frame. The original arcade slows down too. In the profile matrix, the conversion slows down less than the arcade in every nation:
 

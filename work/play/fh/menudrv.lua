@@ -1,6 +1,8 @@
 -- menudrv.lua: drive the BIOS menus by script.  ACT="frame:field:frames;..." (fields: Service Mode,
 -- P1 Up/Down/Left/Right/A/B/C/D, 1 Player Start, Coin 1), SNAP="f1,f2,..." snapshots, N the end.
 -- Fields by name from every port.  RESET=f: a soft reset at frame f (RAM kept).  Also DUMP="f" dumps BRAM 0xd00000-0xd00400 and 0x10fd80.. then.
+if _G.__menudrv then return end    -- (MAME runs the autoboot script again at every reset, same Lua
+_G.__menudrv=true                   -- state: once only, or the inputs and snapshots start over)
 local m=manager.machine
 local F={}
 for pn,p in pairs(m.ioport.ports) do for fn,f in pairs(p.fields) do F[fn]=f end end

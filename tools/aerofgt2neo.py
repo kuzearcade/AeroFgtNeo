@@ -32,7 +32,7 @@ sys.path.insert(0, HERE)
 RELEASE_DIRECT = "1"
 RELEASE_DEFS = ("FUSED=1,GX_XPRE=1,FZ_PD=1,GX_SCAN=1,FZ_TPL=1,FX_HOV=1,BG_HIDECLR=1,BG_SETSCR=1,"
                 "UB_LOGO=1,BG_CUTCAP=1,BG_SCRRING=1,SPR_FLIPRES=1,FX_HOVCHG=1,GX_BAND=1,GX_CULLK=1,"
-                "FZ_FASTR=1,FZ_EARLYB=1,FZ_OVF=2,FZ_OVFPB=1,FZ_HOLE=1,FZ_FLIPM=1,SD_FREE=1,BG_FIXCLR=1")
+                "FZ_FASTR=1,FZ_EARLYB=1,FZ_OVF=2,FZ_OVFPB=1,FZ_HOLE=1,FZ_FLIPM=1,SD_FREE=1,BG_FIXCLR=1,SOFT_RB=1")
 os.environ.setdefault("AEROFGT_DIRECT", RELEASE_DIRECT)
 os.environ.setdefault("AEROFGT_DEFS", RELEASE_DEFS)
 
@@ -332,6 +332,7 @@ HAL_VARS = [
     ("HAL_SPR_WPTR", 0xd00bf0),     # long: state of set HAL_SPR_W (hal_spr_go)
     ("HAL_SPR_RA5", 0xd00bf4),      # long: its list position
     ("HAL_SPR_DROPN", 0xd00bf8),    # long: sets shown with sprites dropped (slips)
+    ("HAL_RBOOT", 0xd00bfc),        # word: (SOFT_RB) real frames the reboot buttons have been held
     # sprite column ring (hal/spr.s; free backup RAM 0xd00fac..0xd00fef, which the game's
     # boot RAM test does not touch, unlike the set states at G_SPRBUF)
     ("HAL_SPR_GNEXT", 0xd00fac),    # word: column below the newest set's last one (next start)
